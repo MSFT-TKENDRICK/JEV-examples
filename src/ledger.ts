@@ -123,13 +123,12 @@ export interface FailureOutcome {
 }
 
 /**
- * One probe that was on the table at a given step, with the numbers it was
- * ranked on.
+ * A probe that was assessed at a decision point, whether or not it was run.
  *
- * Recorded so that the *orderings not taken* survive the run. Probe economy —
- * did information-gain selection beat naive cheapest-first? — is a question
- * about alternatives, and a record holding only the probe that ran makes it
- * permanently unanswerable without re-running the example.
+ * Recorded so the counterfactual is recoverable: the probe-economy figure asks
+ * whether gain-per-cost ordering beat naive cheapest-first, and that comparison
+ * is against the orderings that were *not* taken. Without the rejected
+ * alternatives the question cannot be answered from the ledger at all.
  */
 export interface ConsideredProbe {
   probeId: string;
@@ -157,12 +156,11 @@ export interface ProbeRecord {
   posteriorEntropy: number;
   costUnits: number;
   /**
-   * Every probe assessed at this step, including the one chosen, **as ranked
-   * before the observation came back**.
+   * Every probe assessed at this step, including the one that ran.
    *
-   * Optional, and absent means *unmeasured* rather than *passed*: a consumer
-   * that cannot see the alternatives must report probe economy as unknown, not
-   * as a win.
+   * Must be the ranking *as assessed before the observation came back*, not a
+   * re-ranking computed afterwards with the answer known. Optional: when it is
+   * absent the eval reports probe economy as unmeasured, never as a pass.
    */
   considered?: readonly ConsideredProbe[];
 }

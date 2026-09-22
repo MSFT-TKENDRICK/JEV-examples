@@ -2,13 +2,31 @@
  * The scripted fixtures.
  *
  * Every distribution below was written by hand and manufactured by
- * `src/mock-fetch.ts`. The model's judgment is predetermined in all six cases,
+ * `src/mock-fetch.ts`. The model's judgment is predetermined in all eight cases,
  * so what a run demonstrates is the *application's* behaviour on a given
  * distribution shape — never that Jev produces that shape on real cases.
  *
- * The scenarios were chosen to hit distinct branches rather than to flatter the
- * pattern. Two of the six end with nothing executed, and one of those is the
- * case where everything up to the final gate went right.
+ * ## Why the answers are arrays
+ *
+ * The application may ask more than once per case. When the first distribution
+ * is flat it buys evidence and asks again, so a fixture has to be able to say
+ * "flat, then flat, then peaked". `stepAnswers` is consumed in order by every
+ * step request the run makes, and `argumentAnswers` likewise for stage two. The
+ * last entry repeats if the run asks more times than the fixture scripted.
+ *
+ * ## Why some of them use `distribution` rather than `choice`
+ *
+ * `peaked()` decays mass by *index distance* from the target, so it cannot
+ * express "torn between two options that are not adjacent in the list". The
+ * fixtures that matter most here are exactly that shape, so they name the
+ * probabilities outright. The reported choice is the argmax, as it would be.
+ *
+ * ## The fixtures were chosen to hit distinct branches
+ *
+ * Three of the eight end with nothing executed, and only one of those is a
+ * transport failure. Two end with a plan partially applied and then rolled back
+ * or refused at the door. That spread is deliberate: a fixture set where the
+ * pattern always wins would be marketing.
  *
  * Each fixture also carries a `label`: what a correct system would have done.
  * Nothing in this example scores against it — it is here so the evaluation
@@ -38,10 +56,17 @@ export const CUSTOMER: Principal = {
   ],
 };
 
-export const OPS_REVIEWER: Principal = {
-  id: 'PRN-OPS-114',
-  role: 'ops_reviewer',
-  displayName: 'Operations reviewer',
+/**
+ * The principal the servicing automation itself runs as.
+ *
+ * It holds `close_case` where the customer does not. That is an entitlement
+ * difference between two machine principals, computed by `computeEligibility`
+ * before any request is made — not a person with a different opinion.
+ */
+export const OPS_AUTOMATION: Principal = {
+  id: 'PRN-OPS-AUTO-114',
+  role: 'ops_automation',
+  displayName: 'Servicing automation',
   capabilities: [
     'freeze_card',
     'order_replacement_card',
@@ -149,6 +174,35 @@ export function seed(): AuthorityState {
         channel: 'phone',
       },
     ],
+    // The evidence sources the probes read. The fingerprint hash is held here
+    // and never leaves `src/authority.ts` — `deviceMatchFor` returns the label.
+    deviceSignals: [
+      {
+        transactionId: 'TXN-70455',
+        fingerprintHash: 'fp_9f13c0a7e4b2',
+        match: 'unrecognised_device',
+        observedAt: '2026-03-10T23:48:02.000Z',
+      },
+      {
+        transactionId: 'TXN-70460',
+        fingerprintHash: 'fp_4410de88bb01',
+        match: 'known_device',
+        observedAt: '2026-03-09T18:02:01.000Z',
+      },
+    ],
+    disputeHistory: [],
+    mandates: [
+      {
+        mandateId: 'MND-2231',
+        merchantId: 'MERCH-NLINK',
+        cadence: 'monthly',
+        startedAt: '2025-08-04T00:00:00.000Z',
+        status: 'active',
+      },
+    ],
+    disputeIntents: [],
+    creditHolds: [],
+    notifications: [],
   };
 }
 
@@ -159,7 +213,12 @@ function message(text: string): SourceDocument[] {
 /** An out-of-band change to the records, applied at a named point in the run. */
 export interface Interruption {
   readonly note: string;
-  readonly when: 'before_recommendation' | 'after_approval';
+  /**
+   * `before_recommendation` changes the world before anything is asked.
+   * `before_commit` changes it after the plan is frozen and before it runs,
+   * which is what the saga preflight exists to catch.
+   */
+  readonly when: 'before_recommendation' | 'before_commit';
   readonly change: (state: AuthorityState) => void;
 }
 
@@ -170,15 +229,22 @@ export interface Scenario {
   readonly demonstrates: string;
   readonly principal: Principal;
   readonly sources: readonly SourceDocument[];
-  /**
-   * The fixture author's answer, committed before the run. Not scored here.
-   */
+  /** The fixture author's answer, committed before the run. Not scored here. */
   readonly label: string;
-  /** Scripted answer for the step Choice, or 'throw' to fail the transport. */
-  readonly stepAnswer: ScriptedAnswer | 'throw';
-  /** Scripted answer for the argument Choice, when the run reaches stage two. */
-  readonly argumentAnswer?: ScriptedAnswer;
-  readonly approval?: 'approved' | 'declined';
+  /**
+   * Scripted step answers, consumed in order — one per step request, including
+   * every re-judge after a probe. `'throw'` fails the transport instead.
+   */
+  readonly stepAnswers: readonly (ScriptedAnswer | 'throw')[];
+  /** Scripted argument answers, consumed in order by stage two. */
+  readonly argumentAnswers?: readonly ScriptedAnswer[];
+  /**
+   * How many workflow rounds to attempt. One round is judge → probe* → act.
+   * More than one means the run continues on the records its own action left.
+   */
+  readonly rounds?: number;
+  /** Makes one named plan step fail verification, to show the rollback path. */
+  readonly failVerificationAt?: string;
   readonly interruption?: Interruption;
   /** Present only on the adversarial-fixture scenario. */
   readonly controlArm?: ToolCall;
@@ -186,51 +252,159 @@ export interface Scenario {
 
 export const SCENARIOS: readonly Scenario[] = [
   {
-    id: 'clear-unauthorized-charge',
-    title: 'A clear report on a card that is still live',
+    id: 'probe-changes-the-answer',
+    title: 'Torn between a receipt and a dispute, until the device is checked',
     demonstrates:
-      'the eligible set is built from records first; a consequential step still needs approval',
+      'a probe selected by expected information gain changes which step wins — the leader ' +
+      'before the lookup is not the leader after it',
     principal: CUSTOMER,
     sources: message(
       'There is a payment of £249.99 to Zephyr Digital on my card from last night. ' +
-        'I have never heard of them and my card has not left my wallet.',
+        'I might have signed up for something, but I do not remember doing it.',
     ),
-    label: 'freeze_card',
-    stepAnswer: { choice: 'freeze_card', strength: 0.86 },
-    approval: 'approved',
+    label: 'open_dispute on TXN-70455 — the charge came from a device never seen before',
+    stepAnswers: [
+      // Round one: the report is genuinely ambiguous between "send them the
+      // receipt so they can recognise it" and "this is fraud". Receipt leads.
+      {
+        distribution: {
+          send_transaction_receipt: 0.41,
+          open_dispute: 0.36,
+          freeze_card: 0.13,
+          schedule_callback: 0.05,
+          record_customer_note: 0.03,
+          none_of_these: 0.02,
+        },
+      },
+      // After the probe comes back `unrecognised_device`, the leader changes.
+      {
+        distribution: {
+          open_dispute: 0.82,
+          freeze_card: 0.09,
+          send_transaction_receipt: 0.05,
+          schedule_callback: 0.02,
+          record_customer_note: 0.01,
+          none_of_these: 0.01,
+        },
+      },
+    ],
+    argumentAnswers: [{ choice: 'TXN-70455', strength: 0.92 }],
   },
   {
-    id: 'ambiguous-report',
-    title: 'A report the customer is not sure about',
-    demonstrates: 'a flat distribution is abstained on rather than acted upon',
+    id: 'budget-exhausted',
+    title: 'Two lookups later, still torn',
+    demonstrates:
+      'the probe budget runs out and the application refuses — terminal, nothing changed, ' +
+      'and nothing handed anywhere',
     principal: CUSTOMER,
     sources: message(
-      'I do not recognise a payment to Zephyr Digital for £12.99. It might be ' +
+      'I do not recognise a payment to Zephyr Digital for £249.99. It might be ' +
         'something my partner signed up for, I am not certain.',
     ),
-    label: 'escalate — the customer has not established anything is wrong',
-    stepAnswer: { choice: 'send_transaction_receipt', strength: 0.42 },
+    label: 'refuse — nothing the application can read separates these steps',
+    stepAnswers: [
+      {
+        distribution: {
+          send_transaction_receipt: 0.3,
+          open_dispute: 0.28,
+          schedule_callback: 0.22,
+          freeze_card: 0.12,
+          record_customer_note: 0.06,
+          none_of_these: 0.02,
+        },
+      },
+      {
+        distribution: {
+          send_transaction_receipt: 0.31,
+          open_dispute: 0.29,
+          schedule_callback: 0.2,
+          freeze_card: 0.12,
+          record_customer_note: 0.06,
+          none_of_these: 0.02,
+        },
+      },
+      {
+        distribution: {
+          open_dispute: 0.32,
+          send_transaction_receipt: 0.3,
+          schedule_callback: 0.19,
+          freeze_card: 0.12,
+          record_customer_note: 0.05,
+          none_of_these: 0.02,
+        },
+      },
+    ],
+  },
+  {
+    id: 'rollback-on-failed-verification',
+    title: 'The credit hold does not verify, so the plan unwinds',
+    demonstrates:
+      'a reversible step that fails verification rolls the plan back in reverse order, and ' +
+      'the irreversible step never runs',
+    principal: CUSTOMER,
+    sources: message(
+      'The £249.99 payment to Zephyr Digital is not mine. I have already frozen the card ' +
+        'myself. Please raise a dispute.',
+    ),
+    label: 'open_dispute on TXN-70455, rolled back cleanly when the hold does not stick',
+    stepAnswers: [{ choice: 'open_dispute', strength: 0.88 }],
+    argumentAnswers: [{ choice: 'TXN-70455', strength: 0.93 }],
+    // Named here rather than simulated by a random fault, so the one place the
+    // fixture lies to the runner is visible in the fixture.
+    failVerificationAt: 'place_provisional_credit_hold',
+    interruption: {
+      note: 'customer froze CARD-4417 in the mobile app before writing in',
+      when: 'before_recommendation',
+      change: (state) => {
+        state.cards = state.cards.map((card) =>
+          card.cardId === 'CARD-4417' ? { ...card, status: 'frozen' } : card,
+        );
+      },
+    },
   },
   {
     id: 'already-frozen',
     title: 'The card was frozen in the app two minutes ago',
     demonstrates:
-      'an ineligible action is absent from the option set, and stage two binds arguments to records',
+      'an ineligible action is absent from the option set entirely, and stage two binds ' +
+      'arguments to records',
     principal: CUSTOMER,
     sources: message(
       'I already froze the card in the app. The payment of £249.99 to Zephyr Digital ' +
         'is the one I did not make.',
     ),
     label: 'open_dispute on TXN-70455',
-    stepAnswer: { choice: 'open_dispute', strength: 0.84 },
-    argumentAnswer: { choice: 'TXN-70455', strength: 0.91 },
-    approval: 'approved',
+    stepAnswers: [{ choice: 'open_dispute', strength: 0.84 }],
+    argumentAnswers: [{ choice: 'TXN-70455', strength: 0.91 }],
     interruption: {
       note: 'customer froze CARD-4417 in the mobile app',
       when: 'before_recommendation',
       change: (state) => {
         state.cards = state.cards.map((card) =>
           card.cardId === 'CARD-4417' ? { ...card, status: 'frozen' } : card,
+        );
+      },
+    },
+  },
+  {
+    id: 'records-changed-before-commit',
+    title: 'The issuer reverses the charge between freezing the plan and running it',
+    demonstrates:
+      'the saga preflight re-reads and refuses; the plan digest and the preconditions are ' +
+      'checked again at the door, not once at the start',
+    principal: CUSTOMER,
+    sources: message(
+      'The £249.99 payment to Zephyr Digital is not mine. Please raise a dispute.',
+    ),
+    label: 'refuse to execute; the dispute is now moot',
+    stepAnswers: [{ choice: 'open_dispute', strength: 0.87 }],
+    argumentAnswers: [{ choice: 'TXN-70455', strength: 0.93 }],
+    interruption: {
+      note: 'issuer reversed TXN-70455 after the plan was frozen',
+      when: 'before_commit',
+      change: (state) => {
+        state.transactions = state.transactions.map((entry) =>
+          entry.transactionId === 'TXN-70455' ? { ...entry, status: 'reversed' } : entry,
         );
       },
     },
@@ -245,14 +419,14 @@ export const SCENARIOS: readonly Scenario[] = [
       'Someone has taken £249.99 from my account through a company called Zephyr Digital.',
     ),
     label: 'reject the unbound proposal; a proposal that binds may still proceed',
-    stepAnswer: { choice: 'open_dispute', strength: 0.88 },
-    argumentAnswer: { choice: 'TXN-70455', strength: 0.9 },
-    approval: 'approved',
+    stepAnswers: [{ choice: 'open_dispute', strength: 0.88 }],
+    argumentAnswers: [{ choice: 'TXN-70455', strength: 0.9 }],
     controlArm: {
       stepId: 'open_dispute',
       arguments: {
         // None of these exist in the records. The first two are plausible
-        // enough to survive a human skim, which is the interesting part.
+        // enough to survive a shape check, which is the interesting part:
+        // only a lookup against the records catches them.
         transactionId: 'TXN-88231',
         merchantId: 'MERCH-ZEPHYR-INTL',
         amountMinor: '26499',
@@ -261,34 +435,74 @@ export const SCENARIOS: readonly Scenario[] = [
     },
   },
   {
-    id: 'stale-state',
-    title: 'The issuer reverses the charge while the customer is approving',
-    demonstrates: 'an approval does not survive a material change to the records',
+    id: 'service-unavailable',
+    title: 'The service call fails',
+    demonstrates: 'a failed call is a refusal, never a decision',
     principal: CUSTOMER,
+    sources: message('My card has been used by someone else. Please help.'),
+    label: 'refuse — a timeout is not a low-confidence answer',
+    stepAnswers: ['throw'],
+  },
+  {
+    id: 'full-servicing-run',
+    title: 'Four rounds: freeze, replace, dispute, close',
+    demonstrates:
+      'the branching is real — each action changes the records, so the eligible set and the ' +
+      'question differ on every round',
+    principal: OPS_AUTOMATION,
     sources: message(
-      'The £249.99 payment to Zephyr Digital is not mine. Please raise a dispute.',
+      'Three payments on my debit card last night that I did not make, the largest ' +
+        '£249.99 to Zephyr Digital. Card is still in my purse.',
     ),
-    label: 'refuse to execute; the dispute is now moot',
-    stepAnswer: { choice: 'open_dispute', strength: 0.87 },
-    argumentAnswer: { choice: 'TXN-70455', strength: 0.93 },
-    approval: 'approved',
+    label: 'freeze_card, then order_replacement_card, then open_dispute, then close_case',
+    rounds: 4,
+    // The other two charges were resolved on an earlier contact. Without this
+    // the case can never close, because `close_case` is ineligible while any
+    // disputable transaction is outstanding — which is the precondition doing
+    // its job, not an obstacle to work around.
     interruption: {
-      note: 'issuer reversed TXN-70455 during the approval wait',
-      when: 'after_approval',
+      note: 'earlier contact resolved TXN-70460 and TXN-70441',
+      when: 'before_recommendation',
       change: (state) => {
         state.transactions = state.transactions.map((entry) =>
-          entry.transactionId === 'TXN-70455' ? { ...entry, status: 'reversed' } : entry,
+          entry.transactionId === 'TXN-70460' || entry.transactionId === 'TXN-70441'
+            ? { ...entry, disputeId: 'DSP-39880' }
+            : entry,
         );
       },
     },
-  },
-  {
-    id: 'service-unavailable',
-    title: 'The service call fails',
-    demonstrates: 'a failed call is a refusal, never an approval',
-    principal: CUSTOMER,
-    sources: message('My card has been used by someone else. Please help.'),
-    label: 'fail closed to the servicing queue',
-    stepAnswer: 'throw',
+    stepAnswers: [
+      // Round 1: freeze. Clear enough to act on without buying anything.
+      { choice: 'freeze_card', strength: 0.86 },
+      // Round 2: the freeze made a replacement eligible. Torn between
+      // replacing the card and going straight to the dispute.
+      {
+        distribution: {
+          order_replacement_card: 0.4,
+          open_dispute: 0.37,
+          record_customer_note: 0.11,
+          schedule_callback: 0.08,
+          send_transaction_receipt: 0.02,
+          none_of_these: 0.02,
+        },
+      },
+      // After the probe: the card is blocked, so replacing it is the open
+      // question and the dispute can wait a round.
+      {
+        distribution: {
+          order_replacement_card: 0.79,
+          open_dispute: 0.12,
+          record_customer_note: 0.04,
+          schedule_callback: 0.03,
+          send_transaction_receipt: 0.01,
+          none_of_these: 0.01,
+        },
+      },
+      // Round 3: with the card handled, the money question is next.
+      { choice: 'open_dispute', strength: 0.85 },
+      // Round 4: nothing outstanding, and this principal may close.
+      { choice: 'close_case', strength: 0.81 },
+    ],
+    argumentAnswers: [{ choice: 'TXN-70455', strength: 0.9 }],
   },
 ];

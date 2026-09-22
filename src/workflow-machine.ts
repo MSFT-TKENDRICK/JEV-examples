@@ -3,19 +3,22 @@
  *
  * ## The ordering that matters
  *
- *   1. read the authoritative records                     (src/authority.ts)
- *   2. compute which steps are eligible, deterministically (this file)
- *   3. offer *only* those steps to Jev as Choice options    (recommend.ts)
- *   4. apply an explicit abstention policy to the answer    (policy.ts)
- *   5. bind arguments, step-specifically, to records        (this file)
- *   6. require approval, revalidate, then execute           (approval.ts)
+ *   1. read the authoritative records                      (src/authority.ts)
+ *   2. compute which steps are eligible, deterministically  (this file)
+ *   3. offer *only* those steps to Jev as Choice options     (recommend.ts)
+ *   4. apply an explicit policy to the distribution          (policy.ts)
+ *   5. when it is flat, probe by expected information gain   (probes.ts)
+ *      and re-judge — never ask a person
+ *   6. bind arguments, step-specifically, to records         (this file)
+ *   7. expand into a plan, preflight, act, verify, compensate (plan.ts)
  *
- * Steps 1, 2, 5 and 6 are ordinary code and hold whether or not Jev is in the
+ * Steps 1, 2, 6 and 7 are ordinary code and hold whether or not Jev is in the
  * loop at all — `baseline.ts` runs exactly the same path with the model removed.
- * What Jev contributes is which eligible step to try first. That is a
- * prioritization benefit, and this repository does not measure it.
+ * What Jev contributes is which eligible step to try first, and a distribution
+ * shape that step 5 can compute over. That is a prioritization benefit, and this
+ * repository does not measure it.
  *
- * ## Two design constraints inherited from the claim contract
+ * ## Three design constraints inherited from the claim contract
  *
  * **Ask for the next workflow step, not "which tool to call".** Freezing a card,
  * opening a dispute and scheduling a callback are co-applicable — a servicing
@@ -30,6 +33,16 @@
  * meaningful depends on the step that was selected. Candidate argument sets are
  * therefore constructed *after* a step is chosen, from the records, and never
  * from free text.
+ *
+ * **Name the reversal path for every step.** Each entry in the catalog below
+ * declares whether its effect can be undone, how, what verifying it means, and
+ * what would be left behind if verification failed. An action the application
+ * cannot undo runs last, and `validatePlan` in `src/compensate.ts` refuses any
+ * plan that puts it anywhere else.
+ *
+ * Declaring a step reversible is a claim about the records, not about the world.
+ * Unfreezing a card restores its status; it does not restore the payment the
+ * customer could not make while it was blocked.
  */
 
 import type {
@@ -107,13 +120,20 @@ export interface StepSpec {
   readonly description: string;
   readonly capability: Capability;
   /**
-   * Consequential steps require a named human approval before execution.
-   * Consequence is a property of the action, configured here, not something a
-   * model is asked to assess.
+   * Whether this step's effect on the records can be undone.
+   *
+   * A property of the action, configured here, not something a model is asked
+   * to assess. It is also narrower than "safe": a reversible step is one the
+   * application can put back, which says nothing about what happened in the
+   * meantime.
    */
-  readonly consequential: boolean;
-  /** Which principal must approve. Roles are not interchangeable. */
-  readonly approvalBy: PrincipalRole | null;
+  readonly reversible: boolean;
+  /** How it is undone. Required when `reversible`, null when it is not. */
+  readonly reversal: string | null;
+  /** What verifying it means — always a read of the world, never an assumption. */
+  readonly verification: string;
+  /** What would be left behind if it acted and verification then failed. */
+  readonly residueIfUnverified: string;
   readonly slots: readonly SlotSpec[];
 }
 
@@ -126,6 +146,25 @@ export interface WorkflowContext {
   readonly sources: readonly SourceDocument[];
   /** Steps already executed in this run, so the loop does not repeat itself. */
   readonly completed: readonly StepId[];
+  /**
+   * What probing has established so far, oldest first.
+   *
+   * Carried in the context because a re-judgement after a probe must be a
+   * genuinely different question. Handing the model the same state twice and
+   * hoping for a different distribution is not probing.
+   */
+  readonly evidence: readonly EvidenceRecord[];
+}
+
+/** One probe's finding, in the form the next request will carry. */
+export interface EvidenceRecord {
+  readonly probeId: string;
+  /** The bounded observation label, never a raw record. */
+  readonly observation: string;
+  /** Plain-language reading of that label, for the request and the report. */
+  readonly detail: string;
+  readonly source: string;
+  readonly readAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,8 +179,11 @@ export const STEPS: readonly StepSpec[] = [
       'Block further authorizations on the card in scope. Appropriate when the customer ' +
       'reports activity they did not authorize and the card is still usable.',
     capability: 'freeze_card',
-    consequential: true,
-    approvalBy: 'customer',
+    reversible: true,
+    reversal: 'unfreeze the card through the same issuer interface',
+    verification: 'the card record reads status=frozen on a fresh snapshot',
+    residueIfUnverified:
+      'a card the customer believes is usable but may not be, with no dispute raised',
     slots: [
       {
         name: 'cardId',
@@ -159,8 +201,12 @@ export const STEPS: readonly StepSpec[] = [
       'Issue a new card to the address already on file. Appropriate only once the existing ' +
       'card is no longer usable.',
     capability: 'order_replacement_card',
-    consequential: true,
-    approvalBy: 'customer',
+    // Stock can be un-reserved; a card that has entered the post cannot be
+    // recalled, so the dispatch is the point of no return in its plan.
+    reversible: false,
+    reversal: null,
+    verification: 'replacementOrderedAt is set on the card record',
+    residueIfUnverified: 'a card in the post to an address nothing re-confirmed',
     slots: [
       {
         name: 'cardId',
@@ -178,8 +224,13 @@ export const STEPS: readonly StepSpec[] = [
       'Start a formal chargeback for one posted transaction the customer says they did not ' +
       'make. Appropriate when a specific transaction has been identified.',
     capability: 'open_dispute',
-    consequential: true,
-    approvalBy: 'customer',
+    // The chargeback presentment is the point of no return: once it reaches the
+    // scheme it is a claim against the merchant that cannot be unmade.
+    reversible: false,
+    reversal: null,
+    verification: 'the transaction record carries a dispute identifier',
+    residueIfUnverified:
+      'a provisional credit hold on the customer and no dispute to justify it',
     slots: [
       {
         name: 'transactionId',
@@ -214,11 +265,14 @@ export const STEPS: readonly StepSpec[] = [
     id: 'schedule_callback',
     label: 'Schedule a callback',
     description:
-      'Book a time for a human to call the customer back. Appropriate when the case needs a ' +
-      'conversation rather than an immediate action.',
+      'Book a call slot with the contact centre. This is a servicing action the customer ' +
+      'asked for — never a way to resolve the machine\'s own uncertainty, which is what probes ' +
+      'are for.',
     capability: 'schedule_callback',
-    consequential: false,
-    approvalBy: null,
+    reversible: true,
+    reversal: 'release the slot back to the scheduler',
+    verification: 'the scheduler reports the slot held against this case',
+    residueIfUnverified: 'a slot nobody is holding and a customer expecting a call',
     slots: [
       {
         name: 'slotId',
@@ -235,8 +289,13 @@ export const STEPS: readonly StepSpec[] = [
       'Send the customer the full merchant and timing detail for a transaction, so they can ' +
       'recognize it. Appropriate when the customer may not recognize a legitimate charge.',
     capability: 'send_transaction_receipt',
-    consequential: false,
-    approvalBy: null,
+    // A sent message has no inverse. This is the clearest case in the catalog of
+    // an effect that compensation cannot reach, and it is why "reversible" is a
+    // declared property rather than an optimistic default.
+    reversible: false,
+    reversal: null,
+    verification: 'the messaging service reports the detail delivered',
+    residueIfUnverified: 'transaction detail possibly delivered, possibly not, with no record',
     slots: [
       {
         name: 'transactionId',
@@ -254,8 +313,10 @@ export const STEPS: readonly StepSpec[] = [
       'Attach the customer’s message to the case file without taking any other action. ' +
       'Appropriate when more information is needed before anything can be decided.',
     capability: 'record_customer_note',
-    consequential: false,
-    approvalBy: null,
+    reversible: true,
+    reversal: 'remove the note from the case file',
+    verification: 'the note appears on the case, tagged untrusted',
+    residueIfUnverified: 'a case file that may or may not carry the customer’s words',
     slots: [
       {
         name: 'note',
@@ -272,8 +333,10 @@ export const STEPS: readonly StepSpec[] = [
       'Mark the servicing case resolved. Appropriate only when the reported problem has been ' +
       'fully addressed.',
     capability: 'close_case',
-    consequential: true,
-    approvalBy: 'ops_reviewer',
+    reversible: true,
+    reversal: 'reopen the case',
+    verification: 'the case record reads status=closed on a fresh snapshot',
+    residueIfUnverified: 'a case that may be closed with work still outstanding on it',
     slots: [
       {
         name: 'caseId',
@@ -662,7 +725,7 @@ function slotOrder(slot: SlotSpec): number {
  * A merchant identifier is independently checkable against the directory, so say
  * so. An amount is not: money is only authoritative *relative to a transaction*,
  * and "£264.99" is neither right nor wrong until it is attached to one. Saying
- * that plainly is more useful to a reviewer than pretending the check was the
+ * that plainly is more useful downstream than pretending the check was the
  * same in both cases.
  */
 function unboundFieldReason(
