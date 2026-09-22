@@ -27,8 +27,8 @@
  *   node scripts/assemble-readme.ts --check  # verifies, writes nothing
  */
 
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { join, resolve, relative, dirname } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const README = join(ROOT, 'README.md');
@@ -48,6 +48,53 @@ interface Region {
 function fail(message: string): never {
   console.error(`assemble-readme: ${message}`);
   process.exit(1);
+}
+
+/**
+ * Rewrites a fragment's relative links so they resolve from the repository root.
+ *
+ * A fragment lives in `docs/fragments/` and links out with `../../examples/x.ts`,
+ * which is correct where the file sits. Spliced verbatim into `README.md` at the
+ * root, that same path points outside the repository. The links were copied
+ * unchanged for the whole life of this script, so every such link in the
+ * published README was broken.
+ *
+ * Each target is also required to exist. A fragment that references a deleted
+ * file aborts the run, because a dangling reference is how a rebuild leaves the
+ * documentation describing something that is no longer there — and it is the one
+ * failure a reader finds immediately and the authors never do.
+ *
+ * Anchors, absolute URLs and links inside fenced blocks are left alone; the
+ * fenced ones are sample output rather than navigation.
+ */
+function rebaseLinks(body: string, id: string): string {
+  let fenced = false;
+  return body
+    .split('\n')
+    .map((line, index) => {
+      if (/^\s*```/.test(line)) {
+        fenced = !fenced;
+        return line;
+      }
+      if (fenced) return line;
+      return line.replace(/\]\(([^)]+)\)/g, (whole, target: string) => {
+        if (/^(?:[a-z]+:|#|\/)/i.test(target)) return whole;
+        const [path, anchor] = target.split('#') as [string, string | undefined];
+        if (path === '') return whole;
+        const absolute = resolve(FRAGMENTS, path);
+        if (!existsSync(absolute)) {
+          fail(
+            `docs/fragments/${id}.md line ${index + 1} links to ${path}, which does ` +
+              `not exist. Relative links in a fragment are resolved from ` +
+              `docs/fragments/. If the target moved or was deleted, update the link; ` +
+              `a README assembled from it would ship a dead link.`,
+          );
+        }
+        const rebased = relative(ROOT, absolute).split('\\').join('/');
+        return `](${anchor === undefined ? rebased : `${rebased}#${anchor}`})`;
+      });
+    })
+    .join('\n');
 }
 
 /** Fragment ids present on disk, so an unexpected file is an error not a no-op. */
@@ -79,6 +126,53 @@ function regions(lines: readonly string[]): Region[] {
     found.push({ id: marker.id, marker: marker.line, end: next.line });
   });
   return found;
+}
+
+/**
+ * Refuses if a `](#anchor)` link in the assembled README names no heading.
+ *
+ * Renaming a heading in a fragment silently breaks any link to it, and the
+ * broken link lives in the static part of the README that no fragment owns — so
+ * nothing else in this pipeline would notice. That is exactly how the one
+ * internal link in this file came to point at a heading the rebuild had
+ * renamed.
+ *
+ * The slug rule is GitHub's: lowercase, drop anything that is not a word
+ * character, hyphen or space, then turn each remaining space into a hyphen.
+ * Runs of spaces are *not* collapsed, so `06 — The same maze` slugs with a
+ * double hyphen once the em dash is dropped.
+ */
+function checkAnchors(markdown: string): void {
+  const normalized = markdown.replace(/\r\n/g, '\n');
+  const slugs = new Set<string>();
+  let fenced = false;
+  for (const line of normalized.split('\n')) {
+    if (/^\s*```/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    const heading = line.match(/^#{1,6}\s+(.*)$/);
+    if (heading?.[1] !== undefined) {
+      slugs.add(
+        heading[1]
+          .trim()
+          .toLowerCase()
+          .replace(/[^\w\- ]/g, '')
+          .replace(/ /g, '-'),
+      );
+    }
+  }
+  for (const link of normalized.matchAll(/\]\(#([^)]+)\)/g)) {
+    const anchor = link[1];
+    if (anchor !== undefined && !slugs.has(anchor)) {
+      fail(
+        `README.md links to #${anchor}, which matches no heading. If a fragment ` +
+          `heading was renamed, update the link in the static part of README.md ` +
+          `to the new slug.`,
+      );
+    }
+  }
 }
 
 function main(): void {
@@ -138,10 +232,12 @@ function main(): void {
         );
       }
     });
-    out.splice(region.marker + 1, region.end - region.marker - 1, '', body, '');
+    out.splice(region.marker + 1, region.end - region.marker - 1, '', rebaseLinks(body, region.id), '');
   }
 
   const assembled = `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+
+  checkAnchors(assembled);
 
   if (checkOnly) {
     if (assembled !== original) {
