@@ -72,7 +72,17 @@ export const MIN_PROBE_GAIN = 0.05;
 /** Minimum expected gain as a fraction of the entropy actually present. */
 export const MIN_PROBE_GAIN_FRACTION = 0.05;
 
-/** The tunable part of the policy, so a sweep can vary it without copying the tests. */
+/**
+ * The three distribution gates, isolated so a sweep can vary them without
+ * copying the tests that read them.
+ *
+ * These are *not* the whole tunable surface. `PROBE_BUDGET`, `MIN_PROBE_GAIN`
+ * and `MIN_PROBE_GAIN_FRACTION` above are equally load-bearing and are
+ * deliberately not in this type: they are constants, nothing sweeps them, and
+ * the evaluation harness has no representation of them. A reader wanting to
+ * know how the probe budget changes behaviour will not find that answer
+ * anywhere in this repository.
+ */
 export type Thresholds = {
   minSelectedProbability: number;
   minMargin: number;
@@ -235,6 +245,11 @@ function fmt(value: number): string {
  * exhausted budget is not the same event as one caused by a flat distribution
  * with nothing worth reading, and a record that cannot tell them apart is not
  * much of a record.
+ *
+ * The sweep ignores the extra keys, and reads the three it knows permissively
+ * (`?? 0`, `?? 0`, `?? 1`). Renaming one of the three would therefore not fail
+ * — it would silently make that gate trivially passable and fabricate a
+ * number. The names are load-bearing; do not tidy them.
  */
 export function thresholdRecord(): Record<string, number> {
   return {
