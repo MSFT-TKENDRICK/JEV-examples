@@ -116,15 +116,36 @@ function passesGate(record: DecisionRecord, gate: Gate): boolean {
  * policy's thresholds, it was not the model declining via `none-of-these`, and
  * the harness still executed something other than the recommendation.
  */
+/**
+ * Reads a threshold the recorded policy must carry.
+ *
+ * Defaulting a missing key to a permissive value (`?? 0`, `?? 1`) would make the
+ * gate trivially passable and report a contradiction that never happened. That
+ * is the failure mode where the denominator is *fine* — every count real, every
+ * count meaningless — so stating N does not catch it. The only safe resolution
+ * for a read that could not be made is to refuse.
+ */
+function requiredThreshold(record: DecisionRecord, key: string): number {
+  const value = record.policy.thresholds[key];
+  if (value === undefined) {
+    throw new Error(
+      `decision ${record.decisionId} recorded no '${key}' threshold, so whether it ` +
+        `cleared its own gate cannot be determined. If a policy renamed this key, ` +
+        `update deterministicallyContradicted() in examples/fsi/eval/sweep.ts; ` +
+        `defaulting it would fabricate a contradiction count.`,
+    );
+  }
+  return value;
+}
+
 export function deterministicallyContradicted(record: DecisionRecord): boolean {
   const choice = record.recommendation?.choice;
   if (choice === undefined || isNoneOption(choice)) return false;
 
-  const recorded = record.policy.thresholds;
   const clearedItsOwnGate = passesGate(record, {
-    minSelectedProbability: recorded['minSelectedProbability'] ?? 0,
-    minMargin: recorded['minMargin'] ?? 0,
-    maxNormalizedEntropy: recorded['maxNormalizedEntropy'] ?? 1,
+    minSelectedProbability: requiredThreshold(record, 'minSelectedProbability'),
+    minMargin: requiredThreshold(record, 'minMargin'),
+    maxNormalizedEntropy: requiredThreshold(record, 'maxNormalizedEntropy'),
   });
 
   return clearedItsOwnGate && record.executed.divergedFromRecommendation;
@@ -271,6 +292,12 @@ export interface ProbeEconomy {
    * disagree — a bug in the example, not an interesting result.
    */
   rankingViolations: number;
+  /**
+   * Comparisons where an efficiency could not be computed, so no verdict on a
+   * ranking violation was possible. Reported separately because folding it into
+   * `rankingViolations === 0` would read as "measured, none found".
+   */
+  efficiencyUnmeasured: number;
 }
 
 function ratio(numerator: number, denominator: number): number | null {
@@ -290,6 +317,7 @@ export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
   let noAlternatives = 0;
   let disagreements = 0;
   let rankingViolations = 0;
+  let efficiencyUnmeasured = 0;
   const costMultipliers: number[] = [];
   const gainMultipliers: number[] = [];
 
@@ -322,11 +350,12 @@ export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
 
       const chosenEfficiency = ratio(probe.expectedInformationGain, probe.costUnits);
       const cheapestEfficiency = ratio(cheapest.expectedInformationGain, cheapest.costUnits);
-      if (
-        chosenEfficiency !== null &&
-        cheapestEfficiency !== null &&
-        cheapestEfficiency > chosenEfficiency
-      ) {
+      if (chosenEfficiency === null || cheapestEfficiency === null) {
+        // A comparison that could not be made is not a comparison that passed.
+        // Silently skipping here would fold "could not measure" into the same
+        // zero as "measured, no violation" and understate the defect it counts.
+        efficiencyUnmeasured += 1;
+      } else if (cheapestEfficiency > chosenEfficiency) {
         rankingViolations += 1;
       }
     }
@@ -341,6 +370,7 @@ export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
     meanCostMultiplier: mean(costMultipliers),
     meanGainMultiplier: mean(gainMultipliers),
     rankingViolations,
+    efficiencyUnmeasured,
   };
 }
 

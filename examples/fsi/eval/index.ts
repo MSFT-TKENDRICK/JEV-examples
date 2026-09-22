@@ -140,6 +140,18 @@ async function main(): Promise<void> {
               dim('— the cheapest probe had better gain-per-cost; this is a bug, not a result'),
           );
         }
+        // Reported independently of the violation count, and deliberately so:
+        // an unmeasurable comparison is the reason a zero above might mean
+        // "nothing was checked" rather than "nothing was found".
+        if (economy.efficiencyUnmeasured > 0) {
+          console.log(
+            `    ${bold(`${economy.efficiencyUnmeasured} comparison(s) were unmeasurable`)} ` +
+              dim(
+                '— gain-per-cost was undefined, so the ranking rule could not be ' +
+                  'applied to them either way',
+              ),
+          );
+        }
       }
     }
 
