@@ -1,246 +1,321 @@
 /**
- * 04 — Browser use: selecting actions instead of generating them.
+ * 04 - Browser use: a maze a point estimate cannot walk.
  *
  * There is no official TypeSafe browser-use example. The architecture below is
- * the one the best community implementations converge on, and it follows
- * directly from what Jev is: a model that picks from options you supply and
- * never writes free text.
+ * the one the best community implementations converge on, and it follows from
+ * what Jev is: a model that picks from options you supply and never writes free
+ * text.
  *
- * The loop:
- *   1. settle    wait for the DOM to go quiet
- *   2. describe  YOUR CODE enumerates candidate elements and compacts the page
- *   3. evaluate  one Jev request: which element, what verb, done? error? risky?
- *   4. act       your driver (Playwright, CDP, whatever) performs the action
+ * The loop is in `src/site/walk.ts`. What matters here is what it does when the
+ * distribution is flat, because that is the only interesting question a browser
+ * agent ever faces:
  *
- * Two consequences worth internalizing:
+ *   probe     run the read-only peek with the best expected information gain
+ *             per unit cost, update the posterior, decide again
+ *   act       navigate, or resume from the best surviving alternative, or -
+ *             once and only once the belief has concentrated - commit
+ *   refuse    stop, say why, having changed nothing
  *
- *   - Because the candidate list comes from the DOM, the model cannot
- *     hallucinate a selector. It can only pick a real element or `none`.
- *   - Because the page description is a compact element list rather than raw
- *     HTML, each step costs hundreds of tokens instead of tens of thousands.
+ * Uncertainty selects the next machine action. It never selects a person.
+ * There is no queue, no approval, no shortlist handed to somebody else. A run
+ * that cannot proceed ends; it does not become someone's ticket.
  *
- * Low confidence is not a failure — it is a status. The loop turns a split
- * distribution into `ambiguous` and hands back a ranked shortlist rather than
- * clicking on a coin flip. The agent never resolves its own ambiguity: a
- * person (here, a scripted stand-in) picks from the shortlist, or the run ends.
+ * Three fixtures, each showing a different one of those:
+ *
+ *   A  the confident first click is wrong. Three pages later the site proves
+ *      it. The run resumes from the alternative the distribution ranked
+ *      second - and that alternative is exactly the probability mass an argmax
+ *      interface discards at the branch point.
+ *   B  the leader is wrong and cheap peeking says so. Probes chosen by expected
+ *      information gain move the decision from "Invoices & receipts" to
+ *      "Billing history" before a single page is loaded.
+ *   C  nothing discriminates. The peeks return nothing usable, the budget goes,
+ *      and the run refuses - terminal, not a handoff.
+ *
+ * Honesty: the site, its confusable labels, its probe costs and its dead ends
+ * are all authored, in `src/site/graph.ts`. Offline runs script Jev's answers
+ * through `src/mock-fetch.ts`, which exercises the real SDK code path with
+ * manufactured HTTP responses. This example demonstrates what the application
+ * does with a distribution. It is not evidence that the distribution is right.
  *
  * Run:  node examples/04-browser-use.ts
  */
 
+import { eigIsDegenerate } from '../src/information-gain.ts';
 import { createClient } from '../src/client.ts';
-import type { PageElement, Status } from '../src/browser-policy.ts';
-import { buildQuestions, decide } from '../src/browser-policy.ts';
-import type { ScriptedAnswer } from '../src/mock-fetch.ts';
-import { selectedProbability } from '../src/rubric.ts';
-import { banner, bold, cyan, dim, green, pct, red, title, yellow } from '../src/ui.ts';
+import type { SiteScript } from '../src/site/judges.ts';
+import { createJevJudge } from '../src/site/judges.ts';
+import type { WalkEvent, WalkResult } from '../src/site/walk.ts';
+import { walk } from '../src/site/walk.ts';
+import { TASK } from '../src/site/graph.ts';
+import { banner, bold, cyan, dim, green, note, pct, red, title, yellow } from '../src/ui.ts';
 
-const task = 'Find the monthly price of the Pro plan.';
+// ---------------------------------------------------------------------------
+// Fixtures. Every `target` is an explicit distribution, because the whole
+// difficulty of this site is that several labels are genuinely close and the
+// mass has to be able to sit on two of them at once.
+// ---------------------------------------------------------------------------
 
-interface Page {
-  url: string;
-  text: string;
-  elements: PageElement[];
-}
-
-/** A simulated site, so the example runs with no browser installed. */
-const pages: Record<string, Page> = {
-  '/pricing': {
-    url: '/pricing',
-    text: 'Pricing — choose a plan. We use cookies to improve your experience.',
-    elements: [
-      { id: 'e1', role: 'button', label: 'Accept all cookies' },
-      { id: 'e2', role: 'button', label: 'Reject non-essential cookies' },
-      { id: 'e3', role: 'link', label: 'Compare plans' },
-      { id: 'e4', role: 'link', label: 'Delete my account', destructive: true },
-    ],
-  },
-  '/pricing#plans': {
-    url: '/pricing#plans',
-    text: 'Starter, Pro and Enterprise. Toggle billing period to see prices.',
-    elements: [
-      { id: 'e5', role: 'tab', label: 'Monthly billing' },
-      { id: 'e6', role: 'tab', label: 'Annual billing' },
-      { id: 'e7', role: 'link', label: 'Pro plan details' },
-      { id: 'e8', role: 'link', label: 'Enterprise plan details' },
-    ],
-  },
-  '/pricing/pro': {
-    url: '/pricing/pro',
-    text: 'Pro plan — $49 per user per month, billed monthly. Includes SSO and priority support.',
-    elements: [
-      { id: 'e9', role: 'button', label: 'Start free trial' },
-      { id: 'e10', role: 'link', label: 'Back to plans' },
-    ],
-  },
-};
-
-/** The simulated driver. In real code this is Playwright. */
-function act(current: Page, elementId: string): Page {
-  if (current.url === '/pricing' && (elementId === 'e1' || elementId === 'e2')) {
-    return pages['/pricing#plans'] as Page;
-  }
-  if (current.url === '/pricing' && elementId === 'e3') return pages['/pricing#plans'] as Page;
-  if (current.url === '/pricing#plans' && elementId === 'e7') return pages['/pricing/pro'] as Page;
-  return current;
-}
-
-/**
- * Step 2: describe. This is ordinary code, and it is where the token savings
- * live. Jev sees a short structured summary, never the raw DOM.
- */
-function describe(page: Page, history: string[]) {
-  return {
-    task,
-    url: page.url,
-    visibleText: page.text,
-    candidates: Object.fromEntries(
-      page.elements.map((element) => [element.id, `${element.role}: ${element.label}`]),
-    ),
-    stepsTaken: history,
-  };
-}
-
-/** Scripted judgments per step, keyed by URL. */
-const scripts: Record<string, Record<string, ScriptedAnswer>> = {
-  '/pricing': {
-    target: { choice: 'e1', strength: 0.46 },
-    verb: { choice: 'click', strength: 0.97 },
+/** A: confident, and confidently wrong. */
+const CONFIDENT: SiteScript = {
+  home: {
+    target: {
+      distribution: { e1: 0.62, e2: 0.06, e3: 0.05, e4: 0.04, e5: 0.13, e6: 0.09, none: 0.01 },
+    },
     goalMet: { noul: 0.01 },
-    blocked: { noul: 0.04 },
-    looping: { noul: 0.02 },
+    atTarget: { noul: 0.04 },
+    deadEnd: { noul: 0.02 },
   },
-  '/pricing#plans': {
-    target: { choice: 'e7', strength: 0.91 },
-    verb: { choice: 'click', strength: 0.98 },
-    goalMet: { noul: 0.03 },
-    blocked: { noul: 0.02 },
-    looping: { noul: 0.02 },
+  documents: {
+    target: { distribution: { e1: 0.28, e2: 0.64, e3: 0.03, none: 0.05 } },
+    goalMet: { noul: 0.02 },
+    atTarget: { noul: 0.11 },
+    deadEnd: { noul: 0.06 },
   },
-  '/pricing/pro': {
-    target: { choice: 'none', strength: 0.86 },
-    verb: { choice: 'click', strength: 0.6 },
-    goalMet: { noul: 0.96 },
-    blocked: { noul: 0.01 },
-    looping: { noul: 0.02 },
+  archive: {
+    target: { distribution: { e1: 0.88, e2: 0.05, none: 0.07 } },
+    goalMet: { noul: 0.02 },
+    atTarget: { noul: 0.09 },
+    deadEnd: { noul: 0.12 },
+  },
+  archive2025: {
+    target: { distribution: { e1: 0.11, none: 0.89 } },
+    goalMet: { noul: 0.01 },
+    atTarget: { noul: 0.02 },
+    deadEnd: { noul: 0.94 },
+  },
+  billing: {
+    target: { distribution: { e1: 0.3, e2: 0.36, e3: 0.32, e4: 0.01, none: 0.01 } },
+    goalMet: { noul: 0.02 },
+    atTarget: { noul: 0.31 },
+    deadEnd: { noul: 0.02 },
+  },
+  chargeSep: {
+    target: { distribution: { e1: 0.93, e2: 0.02, e3: 0.02, none: 0.03 } },
+    goalMet: { noul: 0.06 },
+    atTarget: { noul: 0.44 },
+    deadEnd: { noul: 0.02 },
+  },
+  reissue: {
+    target: { distribution: { e1: 0.02, e2: 0.02, e3: 0.94, none: 0.02 } },
+    goalMet: { noul: 0.05 },
+    atTarget: { noul: 0.93 },
+    deadEnd: { noul: 0.01 },
+  },
+  submitted: {
+    target: { distribution: { e1: 0.06, none: 0.94 } },
+    goalMet: { noul: 0.97 },
+    atTarget: { noul: 0.21 },
+    deadEnd: { noul: 0.02 },
   },
 };
 
-/**
- * The human in the loop. A real harness posts the shortlist to a queue, a chat
- * message or an approval UI and waits. Returning `undefined` — nobody is
- * available to decide — must end the run, not license a guess.
- *
- * This stand-in answers the one escalation this scripted site produces.
- */
-function askAPerson(shortlist: { option: string; probability: number }[]): string | undefined {
-  const answers: Record<string, string> = {
-    // Both cookie buttons dismiss the banner; a person knows to decline.
-    e1: 'e2',
-  };
-  return shortlist[0] ? answers[shortlist[0].option] : undefined;
+/** B and C: torn between the two closest labels, and leaning the wrong way. */
+const TORN: SiteScript = {
+  ...CONFIDENT,
+  home: {
+    target: {
+      distribution: { e1: 0.09, e2: 0.05, e3: 0.04, e4: 0.03, e5: 0.29, e6: 0.37, none: 0.13 },
+    },
+    goalMet: { noul: 0.01 },
+    atTarget: { noul: 0.05 },
+    deadEnd: { noul: 0.02 },
+  },
+};
+
+interface Scenario {
+  key: string;
+  name: string;
+  script: SiteScript;
+  observations?: Record<string, string>;
+  point: readonly string[];
 }
 
-title('04 — Browser use: pick an element, never invent one');
+const scenarios: readonly Scenario[] = [
+  {
+    key: 'A',
+    name: 'the confident click is wrong',
+    script: CONFIDENT,
+    point: [
+      'The run takes the highest-mass branch, is proven wrong three pages in, and resumes from the',
+      'alternative the distribution ranked second. That alternative is a piece of the distribution.',
+      'An interface that returns one answer never produced it, so there is nothing to return to.',
+    ],
+  },
+  {
+    key: 'B',
+    name: 'probing changes the answer',
+    script: TORN,
+    point: [
+      'The leading label is the wrong one. Read-only peeks, chosen by expected information gain per',
+      'unit cost, move the mass onto a different link before any page is loaded. The probe changed',
+      'the decision; it was not reported alongside a decision already taken.',
+    ],
+  },
+  {
+    key: 'C',
+    name: 'nothing discriminates, so the run refuses',
+    script: TORN,
+    observations: {
+      'badge-counts': 'unknown',
+      'disabled-state': 'unknown',
+      breadcrumb: 'unknown',
+      'footer-legend': 'unknown',
+    },
+    point: [
+      'This account renders none of the metadata the peeks read, so every observation comes back',
+      '`unknown` and the posterior falls back to the prior. The budget goes, nothing separates the',
+      'candidates, and the run stops having changed nothing. Terminal - not a queue, not an',
+      'approval, not a person.',
+    ],
+  },
+];
 
-let page = pages['/pricing'] as Page;
-const history: string[] = [];
-let status: Status = 'running';
-let answer: string | undefined;
-let live = false;
-const MAX_STEPS = 6;
+// ---------------------------------------------------------------------------
 
-for (let step = 0; step < MAX_STEPS; step++) {
-  const questions = buildQuestions(page.elements);
-  const script = scripts[page.url] ?? {};
-  const picked = createClient(() => script);
-  live = picked.live;
-  if (step === 0) banner(live);
+function distribution(values: Readonly<Record<string, number>>): string {
+  return Object.entries(values)
+    .filter(([, mass]) => mass > 0.005)
+    .sort(([, a], [, b]) => b - a)
+    .map(([id, mass]) => `${id} ${mass.toFixed(2)}`)
+    .join('  ');
+}
 
-  const state = describe(page, history);
-  const { answers } = await picked.client.systemOne({ state, questions });
-
-  const { target, verb, goalMet } = answers;
-
-  console.log(`\n${bold(`step ${step + 1}`)}  ${cyan(page.url)}`);
-  console.log(
-    `  ${dim(
-      `${page.elements.length} candidates · ~${Math.ceil(JSON.stringify(state).length / 4)} tokens of page state`,
-    )}`,
-  );
-  console.log(
-    `  target=${target.choice} ${dim(
-      `p=${pct(selectedProbability(target))} · confidence=${pct(target.confidence)} · ` +
-        `goalMet=${pct(goalMet.noul)}`,
-    )}`,
-  );
-
-  // --- The decision. Shared verbatim with example 05's real-browser loop. --
-  const decision = decide(answers);
-  let chosenId: string;
-
-  if (decision.kind === 'terminal') {
-    status = decision.status;
-    if (status === 'done') answer = page.text;
-    const paint = status === 'done' ? green : status === 'blocked' ? red : yellow;
-    console.log(`  ${paint(status.toUpperCase())} ${decision.reason}`);
-    break;
-  }
-
-  if (decision.kind === 'escalate') {
-    console.log(`  ${yellow('AMBIGUOUS')} distribution is split; not clicking on a coin flip`);
-    console.log(`  ${dim('shortlist handed to the caller:')}`);
-    for (const option of decision.shortlist) {
-      const element = page.elements.find((candidate) => candidate.id === option.option);
+function render(event: WalkEvent): void {
+  switch (event.type) {
+    case 'arrive': {
       console.log(
-        `    ${option.option} "${element?.label ?? option.option}" ${pct(option.probability)}`,
+        `\n  ${bold(`step ${event.step}`)}  ${cyan(event.site.file)}  ` +
+          dim(
+            `${event.site.elements.length} candidate${event.site.elements.length === 1 ? '' : 's'} · ~${event.tokens} tokens of page state`,
+          ),
       );
-    }
-
-    const resolved = askAPerson(decision.shortlist);
-    if (!resolved) {
-      // Nobody available to decide. The run ends here; it does not guess.
-      status = 'ambiguous';
-      console.log(`  ${yellow('HALT')} no human decision available — returning the shortlist`);
+      console.log(`    ${dim(event.site.text.slice(0, 100))}`);
       break;
     }
-    chosenId = resolved;
-    const chosen = page.elements.find((candidate) => candidate.id === resolved);
-    console.log(`  ${green('HUMAN')} chose ${resolved} "${chosen?.label ?? resolved}"`);
-  } else {
-    chosenId = decision.elementId;
+    case 'judged': {
+      console.log(`    ${dim('belief ')} ${distribution(event.prior)}`);
+      console.log(
+        `    ${dim(
+          `goalMet ${pct(event.signals.goalMet)} · atTarget ${pct(event.signals.atTarget)} · ` +
+            `deadEnd ${pct(event.signals.deadEnd)}`,
+        )}`,
+      );
+      break;
+    }
+    case 'probe': {
+      const ranked = event.run.ranked
+        .map(
+          (entry) =>
+            `${entry.probe.id} ${entry.expectedInformationGain.toFixed(3)}/${entry.probe.cost}`,
+        )
+        .join(', ');
+      console.log(
+        `    ${yellow('probe  ')} ${event.run.probeId} ` +
+          dim(`cost ${event.run.cost}, EIG ${event.run.expectedInformationGain.toFixed(3)}`),
+      );
+      console.log(`    ${dim(`         considered gain/cost ${ranked}`)}`);
+      console.log(
+        `    ${dim(`         saw "${event.run.observation}" ->`)} ${distribution(event.run.after)}`,
+      );
+      break;
+    }
+    case 'navigate': {
+      console.log(
+        `    ${green('click  ')} "${event.label}" ` +
+          dim(`${pct(event.probability)} -> ${event.to}`),
+      );
+      break;
+    }
+    case 'deadEnd': {
+      console.log(`    ${red('dead end')} ${dim(event.proof)}`);
+      break;
+    }
+    case 'backtrack': {
+      console.log(
+        `    ${yellow('resume ')} "${event.run.via[event.run.via.length - 1] ?? event.run.to}" ` +
+          dim(`path probability ${event.run.alternativeMass.toFixed(4)}`),
+      );
+      console.log(`    ${dim(`         ${event.run.reason}`)}`);
+      break;
+    }
+    case 'commit': {
+      console.log(`    ${green('commit ')} "${event.label}" ` + dim(pct(event.probability)));
+      for (const step of event.plan.steps) {
+        console.log(`    ${dim(`         ${step.id}: ${step.detail}`)}`);
+      }
+      console.log(`    ${dim(`         plan outcome: ${event.plan.outcome}`)}`);
+      break;
+    }
+    case 'refuse': {
+      console.log(`    ${red(`refuse `)} ${event.status}`);
+      console.log(note(event.reason, 13));
+      break;
+    }
+    case 'complete': {
+      console.log(`    ${green('done   ')} ${dim(event.reason)}`);
+      break;
+    }
+    case 'route':
+      break;
   }
+}
 
-  const element = page.elements.find((candidate) => candidate.id === chosenId);
-  if (!element) {
-    status = 'stuck';
-    break;
-  }
-
-  // --- Irreversibility is a code rule, driven off the DOM, not the model. --
-  if (element.destructive) {
-    status = 'needs_confirmation';
-    console.log(`  ${red('CONFIRM')} "${element.label}" is irreversible — handing to a human`);
-    break;
-  }
-
-  console.log(`  ${green('ACT')}   ${verb.choice} ${element.id} "${element.label}"`);
-  history.push(`${verb.choice} "${element.label}"`);
-  page = act(page, element.id);
-
-  if (step === MAX_STEPS - 1) status = 'max_steps';
+function summarise(result: WalkResult): void {
+  console.log(
+    `\n  ${bold('outcome')} ${result.status}  ` +
+      dim(
+        `${result.steps} pages · ${result.judgeCalls} Jev requests · ` +
+          `${result.probes.length} probes costing ${result.budgetSpent} of ` +
+          `${result.budgetSpent + result.budgetLeft} · ${result.backtracks.length} backtrack(s)`,
+      ),
+  );
+  console.log(
+    `  ${dim(
+      `frontier ${result.frontier.open} open, ${result.frontier.dead} dead, ` +
+        `${result.frontier.pruned} pruned holding ${result.frontier.prunedMass.toFixed(4)} ` +
+        `of path mass, beam width ${result.frontier.beamWidth}`,
+    )}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
-title('Result');
-console.log(`  status  ${bold(status)}`);
-console.log(`  url     ${page.url}`);
-console.log(`  steps   ${history.length ? history.join(' → ') : '(none)'}`);
-if (answer) console.log(`  answer  ${cyan(answer)}`);
 
+title('04 - Browser use: pick an element, never invent one');
+banner(createClient().live);
+
+for (const scenario of scenarios) {
+  const judge = createJevJudge({ script: scenario.script });
+
+  console.log(`\n${bold(`${scenario.key}. ${scenario.name}`)}`);
+  console.log(`  ${dim(TASK)}`);
+
+  const result = await walk({
+    judge,
+    ...(scenario.observations === undefined ? {} : { observations: scenario.observations }),
+    onEvent: render,
+  });
+
+  summarise(result);
+  console.log(note(scenario.point, 2));
+}
+
+// ---------------------------------------------------------------------------
+
+console.log(`\n${bold('why a distribution and not an answer')}`);
 console.log(
-  `\n${dim(
-    'The model never produced a selector, a URL or a sentence. It chose among\n' +
-      'elements your code already found, and your code turned those choices —\n' +
-      'plus their probabilities — into a status a caller can act on.',
-  )}`,
+  note(
+    [
+      'A backtracks because the branch point was ranked rather than resolved. The path it resumes',
+      'from is mass the run had already been told about and kept. Collapse the same page to a single',
+      'answer and that alternative does not exist to return to: the beam is one wide, the first dead',
+      'end is the last page, and the run ends where the maze says it ends.',
+      '',
+      'The same collapse disables probing. Expected information gain over a point mass is exactly',
+      'zero for every probe, because H(P) = 0 and the posterior of a point mass is that same point',
+      `mass. eigIsDegenerate({ e5: 1 }) === ${String(eigIsDegenerate({ e5: 1 }))}. An argmax agent does not find probe`,
+      'selection harder; it finds every probe equally worthless. Example 06 runs that arm.',
+    ],
+    2,
+  ),
 );

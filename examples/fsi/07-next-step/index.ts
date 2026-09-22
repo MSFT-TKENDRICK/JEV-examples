@@ -127,6 +127,12 @@ const ledger = createLedger({
   component: 'fsi-07-next-step',
   mode: runMode(live),
   service: { model: 'jev-latest', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
+  // A scripted run is a fixture, and `runId` feeds `planDigest`. With a random
+  // id the digests differ on every run, so no document could quote one and no
+  // reader could reproduce it. The clock is pinned for the same reason. A live
+  // run keeps a fresh id, because there the point is correlating with a real
+  // trace rather than diffing against a recorded one.
+  ...(live ? {} : { runId: 'run-fsi-07-scripted' }),
   ...(process.env['JEV_LEDGER_FILE'] ? { file: process.env['JEV_LEDGER_FILE'] } : {}),
 });
 

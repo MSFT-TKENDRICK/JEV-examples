@@ -17,9 +17,14 @@
     "fsi:07": "node examples/fsi/07-next-step/index.ts",
     "fsi:08": "node examples/fsi/08-runbook-routing/index.ts",
     "fsi:eval": "node examples/fsi/eval/index.ts",
-    "all": "node examples/01-quickstart.ts && node examples/02-judge-rubrics.ts && node examples/03-agent-harness.ts && node examples/04-browser-use.ts && node examples/fsi/07-next-step/index.ts && node examples/fsi/08-runbook-routing/index.ts && node examples/fsi/eval/index.ts",
+    "all": "node examples/01-quickstart.ts && node examples/02-judge-rubrics.ts && node examples/03-agent-harness.ts && node examples/04-browser-use.ts && node examples/06-jev-vs-control.ts && node examples/fsi/07-next-step/index.ts && node examples/fsi/08-runbook-routing/index.ts && node examples/fsi/eval/index.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "check:foundation": "node src/ledger.check.ts && node src/information-gain.check.ts && node src/mock-fetch.check.ts && node src/compensate.check.ts"
+    "check:foundation": "node src/ledger.check.ts && node src/information-gain.check.ts && node src/mock-fetch.check.ts && node src/compensate.check.ts && node src/frontier.check.ts",
+    "check:eval": "node examples/fsi/eval/sweep.check.ts",
+    "check": "npm run typecheck && npm run check:foundation && npm run check:eval && npm run check:media",
+    "readme": "node scripts/assemble-readme.ts",
+    "readme:check": "node scripts/assemble-readme.ts --check",
+    "check:media": "node scripts/media-check.ts"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.14",

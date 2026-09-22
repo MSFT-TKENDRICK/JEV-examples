@@ -253,9 +253,15 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
   population as thresholds move.
 - It reports, per threshold, the number of recorded decisions scored, acted on,
   probed and refused.
-- It reports **probe economy**: how many probes the information-gain policy spent
-  to reach a decision versus a naive policy that runs the cheapest available
-  probe first. Both numbers are computed over the same fixtures.
+- It reports **probe economy**: at each recorded probe step, whether a naive
+  cheapest-first policy would have chosen differently, and where it would have,
+  the ratio of cost paid to expected information gained. Computed from
+  `ProbeRecord.considered`, the option set as assessed at that step.
+- **Probe economy is per-step and reports no trajectory total.** Running a
+  different probe first produces a different observation and a different
+  posterior, so only the first step of the alternative policy is recoverable
+  from a trail that policy never generated. Steps whose option set was not
+  recorded are reported as `unmeasured`, never as a pass.
 - It reports a **contradicted** count: decisions whose recorded metrics cleared
   their own recorded thresholds, but whose executed action diverged from the
   recommendation because deterministic code vetoed it. This is computed from
@@ -281,5 +287,22 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
 - That the probe-economy figure generalises. It compares two policies over
   authored probe costs and authored partitions; change the fixture and the
   ranking can change. It shows the mechanism works, not that it pays.
+- That probe economy describes what cheapest-first would have cost overall. It
+  describes single steps only, and summing those steps into a total would be a
+  fabrication.
+- That a `rankingViolations` count of zero is evidence the selector is good. The
+  shipped ranking is gain-per-cost, so under it that count is zero by
+  construction; it is a consistency check on the recorded trail, nothing more.
+- That the table shows how sensitive **the policy** is to its thresholds. It  sweeps one knob, `minSelectedProbability`, holds `minMargin` and
+  `maxNormalizedEntropy` at their shipped values, and does not vary the
+  probe-side thresholds — the probe budget, and the gain floors a probe must
+  clear — at all. It is the sensitivity of one gate. Describing it as the
+  policy's sensitivity would imply the probe budget had been varied and found
+  not to matter, which no run here tested.
+- That a step with one recorded option is unmeasured. The trail recorded it;
+  it says the selector had nothing to choose between. `unmeasured` is reserved
+  for a step whose alternatives were never written down. Folding the two
+  together sends a reader looking for a missing record that exists, and
+  inflates the count of things this repository failed to measure.
 - The perturbation results are known. **The live path has never been executed.**
   The repo ships the instrument, not the findings.

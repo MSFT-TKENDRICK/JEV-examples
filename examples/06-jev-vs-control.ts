@@ -1,282 +1,251 @@
 /**
- * 06 — Jev against a control model, same task, same page, side by side.
+ * 06 - The same maze, twice: a distribution against a point estimate.
  *
- * Both arms run through `src/browser-driver.ts`: same Chrome, same DOM, same
- * describe step, same click mechanics, same irreversibility guard. The only
- * thing that differs is what decides.
+ * Same site, same loop, same click mechanics, same scripted judgements. The
+ * only difference between the arms is the *shape* of what the decision model
+ * returns:
  *
- *   Jev      one `systemOne` call returning a distribution over the elements,
- *            plus four scalar judgements. The harness reads the shape of that
- *            distribution and refuses to act when it is flat.
+ *   Jev arm      a distribution over the page's elements
+ *   control arm  the same answers with everything but the argmax thrown away
  *
- *   Control  one `generateObject` call returning a single element id and a
- *            self-reported confidence — the standard generative agent loop.
- *            There is no distribution to inspect, so there is nothing to gate
- *            on, and it acts on every answer.
+ * The control arm is built by degrading the Jev arm - `toPointEstimate` takes
+ * the distribution and returns `{ [argmax]: 1 }` - so nothing else can differ.
  *
- * Two things show up in the recording. Jev decides faster, because scoring a
- * fixed set of options is a smaller job than writing a JSON object. And on the
- * ambiguous step Jev stops, while the control proceeds confidently — not
- * because it is a worse model, but because the harness around it was handed one
- * answer instead of a distribution and had nothing to check.
+ * READ THIS BEFORE QUOTING THE RESULT
  *
- * HONESTY, and this matters for reading the video:
- *   - Without TYPESAFE_API_KEY, Jev's judgements are replayed from the script
- *     below and its decision time is ~0 because nothing leaves the process.
- *   - Without AI_GATEWAY_API_KEY, the control's choices are likewise scripted,
- *     and its latency is CONTROL_THINK_MS (default 2600ms), a declared
- *     stand-in for a real generation, not a measurement.
- *   - Set both keys and every number in the summary becomes a real measurement.
- * The recording is evidence that the loops behave as described. It is not a
- * benchmark, and the caption on each video says which mode it ran in.
+ * The control arm is an adversarial fixture, not a fair benchmark. A competent
+ * generative implementation, constrained the same way, could pass the same
+ * checks: it could be made to emit scores over the candidate list, and those
+ * scores could drive the same beam and the same probe selection. The claim here
+ * is narrow and it is about interface shape, not about model quality:
  *
- * Run:  npm run compare
- *       npm run compare -- --no-video
+ *   a bare point estimate does not supply the two things this application
+ *   needs - a ranked alternative to resume from, and a non-degenerate prior
+ *   for expected information gain.
+ *
+ * Both of those are demonstrated below as arithmetic, not as a score.
+ *
+ * Run:  node examples/06-jev-vs-control.ts
  */
 
-import { resolve } from 'node:path';
-import { mkdir } from 'node:fs/promises';
-
+import { assess, eigIsDegenerate, entropy } from '../src/information-gain.ts';
 import { createClient } from '../src/client.ts';
-import type { PageElement, Status } from '../src/browser-policy.ts';
-import { buildQuestions, decide } from '../src/browser-policy.ts';
-import type { ScriptedAnswer } from '../src/mock-fetch.ts';
-import { selectedProbability } from '../src/rubric.ts';
-import type { Arm, PageView, RunResult } from '../src/browser-driver.ts';
-import { runArm } from '../src/browser-driver.ts';
 import type { BrowseAction } from '../src/control-agent.ts';
-import { CONTROL_THINK_MS, createControlAgent } from '../src/control-agent.ts';
-import { prepareFfmpeg, stackSideBySide, toGif } from '../src/compose.ts';
-import { bold, cyan, dim, green, pct, title, yellow } from '../src/ui.ts';
+import { createControlJudge } from '../src/control-agent.ts';
+import type { SiteScript } from '../src/site/judges.ts';
+import { createJevJudge } from '../src/site/judges.ts';
+import type { WalkResult } from '../src/site/walk.ts';
+import { toProbes, walk } from '../src/site/walk.ts';
+import { SITE, TASK, page } from '../src/site/graph.ts';
+import { banner, bold, cyan, dim, green, note, red, title } from '../src/ui.ts';
 
-const task = 'Find the monthly price of the Pro plan.';
-const record = !process.argv.includes('--no-video');
-const media = resolve(import.meta.dirname, '..', 'docs', 'media');
-
-/** Identical beats for both arms, so the side-by-side compares decisions. */
-const beats = { start: 1400, settle: 900, afterClick: 1600, end: 2200 };
-
-// --- Jev's scripted judgements ---------------------------------------------
-const jevScript: Record<string, Record<string, ScriptedAnswer>> = {
-  'pricing.html': {
-    // Two cookie buttons, both plausible, neither dominant. This is the step
-    // the harness is meant to stop on.
-    target: { choice: 'e5', strength: 0.46 },
-    verb: { choice: 'click', strength: 0.97 },
+/**
+ * One fixture, run twice. The home page puts most of its mass on the trap and
+ * keeps a real minority on the route that works - which is precisely the
+ * situation where the two arms come apart.
+ */
+const SCRIPT: SiteScript = {
+  home: {
+    target: {
+      distribution: { e1: 0.62, e2: 0.06, e3: 0.05, e4: 0.04, e5: 0.13, e6: 0.09, none: 0.01 },
+    },
     goalMet: { noul: 0.01 },
-    blocked: { noul: 0.04 },
-    looping: { noul: 0.02 },
+    atTarget: { noul: 0.04 },
+    deadEnd: { noul: 0.02 },
   },
-  'plans.html': {
-    target: { choice: 'e5', strength: 0.91 },
-    verb: { choice: 'click', strength: 0.98 },
-    goalMet: { noul: 0.03 },
-    blocked: { noul: 0.02 },
-    looping: { noul: 0.02 },
+  documents: {
+    target: { distribution: { e1: 0.28, e2: 0.64, e3: 0.03, none: 0.05 } },
+    goalMet: { noul: 0.02 },
+    atTarget: { noul: 0.11 },
+    deadEnd: { noul: 0.06 },
   },
-  'pro.html': {
-    target: { choice: 'none', strength: 0.86 },
-    verb: { choice: 'click', strength: 0.6 },
-    goalMet: { noul: 0.96 },
-    blocked: { noul: 0.01 },
-    looping: { noul: 0.02 },
+  archive: {
+    target: { distribution: { e1: 0.88, e2: 0.05, none: 0.07 } },
+    goalMet: { noul: 0.02 },
+    atTarget: { noul: 0.09 },
+    deadEnd: { noul: 0.12 },
+  },
+  archive2025: {
+    target: { distribution: { e1: 0.11, none: 0.89 } },
+    goalMet: { noul: 0.01 },
+    atTarget: { noul: 0.02 },
+    deadEnd: { noul: 0.94 },
+  },
+  billing: {
+    target: { distribution: { e1: 0.3, e2: 0.36, e3: 0.32, e4: 0.01, none: 0.01 } },
+    goalMet: { noul: 0.02 },
+    atTarget: { noul: 0.31 },
+    deadEnd: { noul: 0.02 },
+  },
+  chargeSep: {
+    target: { distribution: { e1: 0.93, e2: 0.02, e3: 0.02, none: 0.03 } },
+    goalMet: { noul: 0.06 },
+    atTarget: { noul: 0.44 },
+    deadEnd: { noul: 0.02 },
+  },
+  reissue: {
+    target: { distribution: { e1: 0.02, e2: 0.02, e3: 0.94, none: 0.02 } },
+    goalMet: { noul: 0.05 },
+    atTarget: { noul: 0.93 },
+    deadEnd: { noul: 0.01 },
+  },
+  submitted: {
+    target: { distribution: { e1: 0.06, none: 0.94 } },
+    goalMet: { noul: 0.97 },
+    atTarget: { noul: 0.21 },
+    deadEnd: { noul: 0.02 },
   },
 };
 
-// --- The control's scripted answers ----------------------------------------
-// One id, one self-reported number, no distribution. Note the 0.82 on the step
-// Jev refuses: a confident-looking number on a genuinely ambiguous choice is
-// exactly the failure mode, and it is why self-reported confidence is not a
-// gate.
-const controlScript: Record<string, BrowseAction> = {
-  'pricing.html': { done: false, answer: '', elementId: 'e5', confidence: 0.82 },
-  'plans.html': { done: false, answer: '', elementId: 'e5', confidence: 0.88 },
-  'pro.html': {
-    done: true,
-    answer: '$49 per user per month',
-    elementId: 'none',
-    confidence: 0.91,
-  },
+/**
+ * The control arm's replies.
+ *
+ * Deliberately good ones: it picks the same first link the distribution's
+ * argmax picks, and it correctly recognises the archive as a dead end and asks
+ * to back up. It fails anyway, and where it fails is the point.
+ */
+const CONTROL_REPLIES: Record<string, BrowseAction> = {
+  home: { done: false, atTarget: false, deadEnd: false, elementId: 'e1', confidence: 0.62 },
+  documents: { done: false, atTarget: false, deadEnd: false, elementId: 'e2', confidence: 0.64 },
+  archive: { done: false, atTarget: false, deadEnd: false, elementId: 'e1', confidence: 0.88 },
+  archive2025: { done: false, atTarget: false, deadEnd: true, elementId: 'none', confidence: 0.91 },
+  billing: { done: false, atTarget: false, deadEnd: false, elementId: 'e2', confidence: 0.41 },
+  chargeSep: { done: false, atTarget: false, deadEnd: false, elementId: 'e1', confidence: 0.93 },
+  reissue: { done: false, atTarget: true, deadEnd: false, elementId: 'e3', confidence: 0.94 },
+  submitted: { done: true, atTarget: false, deadEnd: false, elementId: 'none', confidence: 0.96 },
 };
 
-/** The human in the loop. Prefers declining cookies. */
-function askAPerson(
-  shortlist: { option: string; probability: number }[],
-  elements: PageElement[],
-): string | undefined {
-  const reject = elements.find((element) => /reject/i.test(element.label));
-  return reject && shortlist.some((option) => option.option === reject.id) ? reject.id : undefined;
+function trace(result: WalkResult): string {
+  return result.history.length === 0 ? '(nothing)' : result.history.join(' -> ');
 }
 
-// --- Arm A: Jev -------------------------------------------------------------
-const jevClient = createClient((body) => {
-  const url = (body.state as { url?: string }).url ?? '';
-  return jevScript[url] ?? {};
+function report(label: string, detail: string, result: WalkResult): void {
+  const ok = result.status === 'goal_reached';
+  console.log(`\n  ${bold(label)}  ${dim(detail)}`);
+  console.log(`    ${dim('path   ')} ${trace(result)}`);
+  console.log(
+    `    ${dim('cost   ')} ${result.steps} pages · ${result.judgeCalls} requests · ` +
+      `${result.probes.length} probes costing ${result.budgetSpent} · ` +
+      `${result.backtracks.length} backtrack(s)`,
+  );
+  console.log(
+    `    ${dim('frontier')} beam ${result.frontier.beamWidth} · ` +
+      `${result.frontier.open} open · ${result.frontier.dead} dead · ` +
+      `${result.frontier.pruned} pruned holding ${result.frontier.prunedMass.toFixed(4)} of path mass`,
+  );
+  console.log(`    ${dim('outcome')} ${ok ? green(result.status) : red(result.status)}`);
+  console.log(note(result.reason, 13));
+}
+
+title('06 - The same maze, twice');
+banner(createClient().live);
+console.log(`\n  ${dim(TASK)}`);
+
+const jev = createJevJudge({ script: SCRIPT, beamWidth: 3 });
+const control = createControlJudge({
+  scripted: CONTROL_REPLIES,
+  // The replay sleep stands in for generation time. Offline it is trimmed so
+  // the example stays runnable; no timing claim is made from these runs.
+  thinkMs: Number(process.env['CONTROL_THINK_MS'] ?? 120),
 });
 
-const jevArm: Arm = {
-  label: 'Jev · System One',
-  detail: jevClient.live ? 'live' : 'replayed locally',
-  async decide(page: PageView) {
-    const { answers } = await jevClient.client.systemOne({
-      state: { task, url: page.url, visibleText: page.text },
-      questions: buildQuestions(page.elements),
-    });
+const jevRun = await walk({ judge: jev });
+const controlRun = await walk({ judge: control });
 
-    const lines = [
-      `  ${dim(`${page.elements.length} candidates`)}  target=${answers.target.choice} ` +
-        dim(`p=${pct(selectedProbability(answers.target))} · goalMet=${pct(answers.goalMet.noul)}`),
-    ];
-
-    const decision = decide(answers);
-
-    if (decision.kind === 'terminal') {
-      return {
-        decision: { kind: 'terminal', status: decision.status, reason: decision.reason },
-        lines: [...lines, `  ${green(decision.status.toUpperCase())} ${decision.reason}`],
-        caption: decision.status === 'done' ? 'answer found' : decision.status,
-      };
-    }
-
-    if (decision.kind === 'escalate') {
-      lines.push(`  ${yellow('AMBIGUOUS')} distribution is split — not clicking on a coin flip`);
-      for (const option of decision.shortlist) {
-        const element = page.elements.find((candidate) => candidate.id === option.option);
-        lines.push(`    ${option.option} "${element?.label ?? option.option}" ${pct(option.probability)}`);
-      }
-
-      const resolved = askAPerson(decision.shortlist, page.elements);
-      if (!resolved) {
-        return {
-          decision: { kind: 'terminal', status: 'ambiguous' as Status, reason: 'no human available' },
-          lines: [...lines, `  ${yellow('HALT')} returning the shortlist`],
-          caption: 'halted — asking a human',
-        };
-      }
-
-      const chosen = page.elements.find((candidate) => candidate.id === resolved);
-      return {
-        decision: { kind: 'act', elementId: resolved },
-        lines: [...lines, `  ${green('HUMAN')} chose "${chosen?.label ?? resolved}"`],
-        caption: `asked a human → "${chosen?.label ?? resolved}"`,
-      };
-    }
-
-    const chosen = page.elements.find((candidate) => candidate.id === decision.elementId);
-    return {
-      decision: { kind: 'act', elementId: decision.elementId },
-      lines: [...lines, `  ${green('ACT')} click "${chosen?.label ?? decision.elementId}"`],
-      caption: `click "${chosen?.label ?? decision.elementId}"`,
-    };
-  },
-};
-
-// --- Arm B: the control -----------------------------------------------------
-const control = createControlAgent(controlScript);
-
-const controlArm: Arm = {
-  label: 'Control · generative model',
-  detail: control.live ? `${control.modelId} · live` : `${control.modelId} · replayed, +${CONTROL_THINK_MS}ms`,
-  async decide(page: PageView, history: string[]) {
-    const action = await control.act(page, task, history);
-
-    const lines = [
-      `  ${dim(`${page.elements.length} candidates`)}  pick=${action.elementId} ` +
-        dim(`self-reported confidence=${pct(action.confidence)}`),
-    ];
-
-    if (action.done) {
-      return {
-        decision: { kind: 'terminal', status: 'done' as Status, reason: action.answer },
-        lines: [...lines, `  ${green('DONE')} ${action.answer}`],
-        caption: 'answer found',
-      };
-    }
-
-    const chosen = page.elements.find((candidate) => candidate.id === action.elementId);
-    return {
-      decision: { kind: 'act', elementId: action.elementId },
-      lines: [...lines, `  ${green('ACT')} click "${chosen?.label ?? action.elementId}"`],
-      caption: `click "${chosen?.label ?? action.elementId}"`,
-    };
-  },
-};
+report('jev     ', jev.detail, jevRun);
+report('control ', control.detail, controlRun);
 
 // ---------------------------------------------------------------------------
-title('06 — Jev vs a control model, same task, same page');
+// Failure attribution. Not "it scored worse" - the specific capability that
+// was missing, and where it was needed.
+// ---------------------------------------------------------------------------
 
-await mkdir(media, { recursive: true });
+console.log(`\n${bold('what the control arm lacked')}`);
+
+const home = page('home');
+const homePrior = { e1: 0.6263, e2: 0.0606, e3: 0.0505, e4: 0.0404, e5: 0.1313, e6: 0.0909 };
+const pointPrior = { e1: 1 };
 
 console.log(
-  dim(
-    jevClient.live
-      ? 'jev: live TypeSafe API'
-      : 'jev: replayed locally (no TYPESAFE_API_KEY) — decision time is ~0 by construction',
-  ),
-);
-console.log(
-  dim(
-    control.live
-      ? `control: live via the AI Gateway (${control.modelId})`
-      : `control: replayed (no AI_GATEWAY_API_KEY) — latency is a declared ${CONTROL_THINK_MS}ms stand-in`,
+  note(
+    [
+      `1. Something to back up to. Both arms clicked "${home.elements[0]?.label}" first. Three pages`,
+      '   later the archive proves the branch finished, and - importantly - the control arm knew it:',
+      '   its schema has a `deadEnd` field and it set it. It asked to back up. There was nowhere to',
+      `   back up to, so ${controlRun.status} was the only answer available.`,
+      '',
+      '   The alternatives you back up to are exactly the probability mass you threw away at the',
+      `   branch point. Here that is ${jevRun.backtracks[0]?.alternativeMass.toFixed(4) ?? 'n/a'} of path probability, sitting on "Billing history",`,
+      '   which is the link that works.',
+    ],
+    2,
   ),
 );
 
-const results: Record<string, RunResult> = {};
-
-for (const [key, arm] of [
-  ['jev', jevArm],
-  ['control', controlArm],
-] as const) {
-  console.log(`\n${bold(arm.label)}`);
-  results[key] = await runArm({
-    arm,
-    entry: 'pricing.html',
-    beats,
-    ...(record ? { outputPath: resolve(media, `compare-${key}.mp4`) } : {}),
-  });
-}
-
-const jev = results['jev'] as RunResult;
-const ctrl = results['control'] as RunResult;
-
-// ---------------------------------------------------------------------------
-title('Side by side');
-
-const row = (name: string, a: string, b: string) =>
-  console.log(`  ${name.padEnd(18)}${a.padEnd(28)}${b}`);
-
-row('', bold('Jev'), bold('Control'));
-row('status', jev.status, ctrl.status);
-row('steps', String(jev.steps), String(ctrl.steps));
-row('decision time', `${jev.decisionMs}ms`, `${ctrl.decisionMs}ms`);
-row('wall clock', `${(jev.totalMs / 1000).toFixed(1)}s`, `${(ctrl.totalMs / 1000).toFixed(1)}s`);
-
-console.log(`\n  ${'clicked'.padEnd(18)}${bold('Jev')}`);
-console.log(`  ${''.padEnd(18)}${jev.history.length ? jev.history.join(' → ') : '(none)'}`);
-console.log(`  ${''.padEnd(18)}${bold('Control')}`);
-console.log(`  ${''.padEnd(18)}${ctrl.history.length ? ctrl.history.join(' → ') : '(none)'}`);
+const probes = toProbes(page('billing')).concat(toProbes(home));
+const distributionEntropy = entropy(Object.values(homePrior));
+const pointEntropy = entropy(Object.values(pointPrior));
 
 console.log(
-  `\n${dim(
-    'Both reached the price. The difference is the cookie banner: Jev saw a flat\n' +
-      'distribution and stopped to ask, the control saw one answer and clicked it.\n' +
-      'Neither model was asked to behave that way — the harness reads what it is given.',
-  )}`,
+  note(
+    [
+      '',
+      '2. A prior worth probing. Expected information gain is the entropy a probe is expected to',
+      '   remove. Over a point mass there is none to remove:',
+      '',
+      `     H(distribution) = ${distributionEntropy.toFixed(4)} bits      H(point estimate) = ${pointEntropy.toFixed(4)} bits`,
+      `     eigIsDegenerate(distribution) = ${String(eigIsDegenerate(homePrior))}   eigIsDegenerate(point estimate) = ${String(eigIsDegenerate(pointPrior))}`,
+      '',
+      '   So every probe on the site scores exactly zero against the point estimate. Not "harder',
+      '   to choose between" - worthless, all of them, identically:',
+    ],
+    2,
+  ),
 );
 
-if (record && jev.videoPath && ctrl.videoPath) {
-  console.log(`\n${dim('composing side-by-side video…')}`);
-  await prepareFfmpeg();
-
-  const stacked = resolve(media, 'jev-vs-control.mp4');
-  stackSideBySide(
-    { path: jev.videoPath, durationSec: jev.totalMs / 1000 },
-    { path: ctrl.videoPath, durationSec: ctrl.totalMs / 1000 },
-    stacked,
+for (const probe of probes) {
+  const withDistribution = assess(homePrior, probe).expectedInformationGain;
+  const withPoint = assess(pointPrior, probe).expectedInformationGain;
+  console.log(
+    `     ${cyan(probe.id.padEnd(16))} ${dim('distribution')} ${withDistribution.toFixed(4)}   ` +
+      `${dim('point estimate')} ${withPoint.toFixed(4)}`,
   );
-  toGif(stacked, resolve(media, 'jev-vs-control.gif'));
-
-  console.log(`  video  ${cyan(stacked)}`);
-  console.log(`  gif    ${cyan(resolve(media, 'jev-vs-control.gif'))}`);
 }
+
+console.log(
+  note(
+    [
+      '',
+      '   A probe-selection loop over a point estimate has nothing to rank. `selectProbe` returns',
+      '   no choice, and the agent proceeds on the answer it already had - which is the behaviour',
+      '   the point estimate was always going to produce, with extra machinery attached.',
+    ],
+    2,
+  ),
+);
+
+// ---------------------------------------------------------------------------
+
+console.log(`\n${bold('the honest reading')}`);
+console.log(
+  note(
+    [
+      'This is a scripted fixture over a site written for the purpose. The labels are confusable',
+      'because they were written to be, the trap is three pages deep because it was built three',
+      'pages deep, and the probe costs are authored numbers. Nothing here measures whether Jev',
+      'judges this site well.',
+      '',
+      'What it does show is mechanical and checkable: given the same judgements, the application',
+      'that keeps the distribution can rank an alternative and price a probe, and the application',
+      'that keeps only the argmax can do neither. Both facts are arithmetic on the numbers printed',
+      'above. A generative model that emitted calibrated scores over the same candidate list would',
+      'drive the same machinery just as well - the deficiency is in the single answer, not in the',
+      'kind of model that produced it.',
+    ],
+    2,
+  ),
+);
+
+console.log(
+  `\n  ${dim(`site: ${Object.keys(SITE).length} pages, rendered to examples/site by src/site/render.ts`)}`,
+);

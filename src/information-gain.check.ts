@@ -16,8 +16,10 @@ import {
 } from './information-gain.ts';
 
 let failures = 0;
+let total = 0;
 
 function check(label: string, condition: boolean, detail?: string): void {
+  total++;
   if (condition) {
     console.log(`PASS  ${label}`);
   } else {
@@ -193,5 +195,5 @@ check(
   'forgetting to list a candidate should weaken the probe, not eliminate the candidate',
 );
 
-console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
+console.log(failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`);
 if (failures > 0) process.exitCode = 1;

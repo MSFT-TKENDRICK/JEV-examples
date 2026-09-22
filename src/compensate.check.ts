@@ -9,8 +9,10 @@
 import { runPlan, validatePlan, type Step } from './compensate.ts';
 
 let failures = 0;
+let total = 0;
 
 function check(label: string, condition: boolean, detail?: string): void {
+  total++;
   if (condition) {
     console.log(`PASS  ${label}`);
   } else {
@@ -194,7 +196,7 @@ async function main(): Promise<void> {
     !['approval_required', 'escalated', 'queued'].some((banned) => outcomes.has(banned as never)),
   );
 
-  console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
+  console.log(failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`);
   if (failures > 0) process.exitCode = 1;
 }
 

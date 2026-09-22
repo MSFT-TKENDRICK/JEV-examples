@@ -1,0 +1,48 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # Both line-ending conventions, deliberately. The README comparison in
+    # scripts/assemble-readme.ts built LF and compared it against a checkout
+    # that Git-for-Windows hands over as CRLF, so it reported drift that did
+    # not exist — and an ubuntu-only matrix could never have caught it, because
+    # the instrument was only ever exercised where it could not fail.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Required, not incidental. scripts/media-check.ts compares the commit
+          # date of a recording against the commit date of what it depicts, and
+          # the default fetch-depth of 1 makes both unreachable. The check
+          # refuses rather than passing in that case, so a shallow checkout here
+          # fails the build loudly instead of silently approving every asset.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - run: npm ci
+
+      # `check` runs typecheck first, then the three suites. The ordering is
+      # load-bearing: Node strips types without checking them, so a suite can
+      # print a full set of passing counters while a type error sits in the
+      # file it just executed.
+      - run: npm run check
+
+      # The examples themselves, end to end. They run without an API key
+      # against scripted fixtures, which is what makes this runnable here.
+      - run: npm run all
+
+      # README.md is assembled from docs/fragments/. This fails if it was
+      # edited directly, or if a fragment's links no longer resolve.
+      - run: npm run readme:check

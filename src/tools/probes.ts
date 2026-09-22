@@ -134,15 +134,6 @@ export function runProbe(world: Readonly<World>, probeId: string): string {
   return readFact(world, definition.fact);
 }
 
-export function probeById(probeId: string): Probe | undefined {
-  return PROBES.find((probe) => probe.id === probeId);
-}
-
-/** Total cost of a set of probes, for budgeting. */
-export function totalCost(probeIds: readonly string[]): number {
-  return probeIds.reduce((sum, id) => sum + (probeById(id)?.cost ?? 0), 0);
-}
-
 /** The cheapest probe not yet run — the naive policy the EIG policy is compared against. */
 export function cheapestRemaining(run: readonly string[]): Probe | undefined {
   return [...PROBES]

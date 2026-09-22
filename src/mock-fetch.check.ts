@@ -10,8 +10,10 @@ import { choice } from '@typesafe-ai/sdk';
 import { mockFetch, type MockScript } from './mock-fetch.ts';
 
 let failures = 0;
+let total = 0;
 
 function check(label: string, condition: boolean, detail?: string): void {
+  total++;
   if (condition) {
     console.log(`PASS  ${label}`);
   } else {
@@ -126,7 +128,7 @@ async function main(): Promise<void> {
   check('an unscripted question still answers deterministically', unscripted.choice.length > 0);
   check('an unscripted question still sums to 1', sumsToOne(Object.values(unscripted.probabilities)));
 
-  console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
+  console.log(failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`);
   if (failures > 0) process.exitCode = 1;
 }
 
