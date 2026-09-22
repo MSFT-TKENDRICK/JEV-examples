@@ -199,9 +199,78 @@ function checkAnchors(markdown: string): { headings: number; anchors: number } {
   return { headings: slugs.size, anchors };
 }
 
+/**
+ * Verifies the expected-files table in `docs/fragments/README.md` against the
+ * fragments actually on disk.
+ *
+ * That table described what each fragment was about in prose written when the
+ * fragments were first planned. Four of the eight descriptions had since stopped
+ * matching their fragment's own title — 06 was still listed as "Jev versus a
+ * point-estimate control" after the rebuild retitled it, and 07 as "bounded
+ * next-step recommendation". Nothing read the table, so nothing disagreed with it.
+ *
+ * Holding the title verbatim is what makes the drift mechanical to detect. A
+ * prose summary would be undecidable; an exact string is a comparison.
+ */
+function checkFragmentIndex(titles: ReadonlyMap<string, string>): number {
+  const indexPath = join(FRAGMENTS, 'README.md');
+  const rows = new Map<string, string>();
+  for (const line of readFileSync(indexPath, 'utf8').replace(/\r\n/g, '\n').split('\n')) {
+    const row = line.match(/^\|\s*`([0-9]{2})\.md`\s*\|\s*(.+?)\s*\|$/);
+    if (row?.[1] !== undefined && row[2] !== undefined) rows.set(row[1], row[2]);
+  }
+
+  // A table that parsed to nothing would agree with every fragment, which is the
+  // same clean sweep over zero rows the anchor check refuses on.
+  if (rows.size === 0) {
+    fail(
+      `docs/fragments/README.md: parsed no rows from the expected-files table, so ` +
+        `it was about to report the table as current without having compared one. ` +
+        `The row pattern has stopped matching.`,
+    );
+  }
+
+  for (const [id, title] of titles) {
+    const listed = rows.get(id);
+    if (listed === undefined) {
+      fail(
+        `docs/fragments/README.md: the expected-files table has no row for ` +
+          `${id}.md. Add: | \`${id}.md\` | ${title} |`,
+      );
+    }
+    if (listed !== title) {
+      fail(
+        `docs/fragments/README.md: the row for ${id}.md reads "${listed}" but the ` +
+          `fragment titles itself "${title}". Update the row; a description that ` +
+          `has stopped matching is worse than none.`,
+      );
+    }
+  }
+
+  for (const id of rows.keys()) {
+    if (!titles.has(id)) {
+      fail(
+        `docs/fragments/README.md: the expected-files table lists ${id}.md, which ` +
+          `does not exist in docs/fragments/.`,
+      );
+    }
+  }
+
+  return rows.size;
+}
+
 function main(): void {
   const checkOnly = process.argv.includes('--check');
-  const original = readFileSync(README, 'utf8');
+  // Normalize once, here, rather than at each consumer. The original version
+  // read the file raw, so `assembled` inherited whatever line endings the
+  // checkout happened to have: on Windows with core.autocrlf=true a fresh
+  // clone yields an all-CRLF README, while splicing produced a mixed file, and
+  // the exact-string comparison below reported drift that did not exist.
+  //
+  // checkAnchors() already normalized for its own regex and said why in its
+  // doc comment. The lesson was learned at one call site and not carried to
+  // this one, 116 lines away, which was never edited and so never re-read.
+  const original = readFileSync(README, 'utf8').replace(/\r\n/g, '\n');
   const lines = original.split('\n');
 
   const found = regions(lines);
@@ -232,14 +301,18 @@ function main(): void {
   // Splice from the bottom up so earlier indices stay valid.
   const out = [...lines];
   let links = 0;
+  const titles = new Map<string, string>();
   for (const region of [...found].sort((a, b) => b.marker - a.marker)) {
-    const body = readFileSync(join(FRAGMENTS, `${region.id}.md`), 'utf8').trim();
+    const body = readFileSync(join(FRAGMENTS, `${region.id}.md`), 'utf8')
+      .replace(/\r\n/g, '\n')
+      .trim();
     if (!/^### /.test(body)) {
       fail(
         `docs/fragments/${region.id}.md must start at heading level ### to match ` +
           `the per-example sections it is spliced into.`,
       );
     }
+    titles.set(region.id, body.split('\n')[0]!.replace(/^###\s+/, '').trim());
     // A ## anywhere inside would outrank the section the fragment lives in, so
     // the title check alone is not enough. Headings inside fenced blocks are
     // sample output, not structure, and are skipped.
@@ -265,12 +338,14 @@ function main(): void {
   const assembled = `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 
   const { headings, anchors } = checkAnchors(assembled);
+  const indexRows = checkFragmentIndex(titles);
   // State the denominators. "No failures" is identical whether the guard checked
   // everything or matched nothing, so the counts are the part that makes a clean
   // run falsifiable.
   const measured =
     `${found.length} fragment(s), ${links} link(s) rebased, ` +
-    `${anchors} anchor(s) against ${headings} heading(s)`;
+    `${anchors} anchor(s) against ${headings} heading(s), ` +
+    `${indexRows} index row(s)`;
 
   if (checkOnly) {
     if (assembled !== original) {

@@ -7,7 +7,16 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Both line-ending conventions, deliberately. The README comparison in
+    # scripts/assemble-readme.ts built LF and compared it against a checkout
+    # that Git-for-Windows hands over as CRLF, so it reported drift that did
+    # not exist — and an ubuntu-only matrix could never have caught it, because
+    # the instrument was only ever exercised where it could not fail.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
