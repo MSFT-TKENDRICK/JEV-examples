@@ -126,6 +126,10 @@ const ledger = createLedger({
   mode: runMode(live),
   file: process.env['JEV_LEDGER_FILE'],
   service: { model: 'unknown', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
+  // Pinned for a scripted run so the recorded ledger is reproducible and can be
+  // quoted; fresh for a live run, where correlating with a real trace is the
+  // point. Same reasoning as the fixed clock.
+  ...(live ? {} : { runId: 'run-fsi-08-scripted' }),
 });
 
 /**
