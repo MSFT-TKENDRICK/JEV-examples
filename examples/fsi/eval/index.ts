@@ -13,7 +13,14 @@
 import { banner } from '../../../src/ui.ts';
 import { bold, dim, note, title } from '../../../src/ui.ts';
 import { collect } from './collect.ts';
-import { contradictions, defaultGates, resolution, scoreable, sweep } from './sweep.ts';
+import {
+  contradictions,
+  defaultGates,
+  probeEconomy,
+  resolution,
+  scoreable,
+  sweep,
+} from './sweep.ts';
 
 const pad = (value: string | number, width: number) => String(value).padStart(width);
 
@@ -73,6 +80,52 @@ async function main(): Promise<void> {
       );
     }
 
+    const economy = probeEconomy(run.records);
+    if (economy.steps > 0) {
+      console.log(`\n  ${bold('Probe economy')} ${dim('(per step, not a trajectory total)')}`);
+      if (economy.measurable === 0) {
+        console.log(
+          dim(
+            `    unmeasured — ${economy.steps} probe step(s), none recorded the\n` +
+              `    alternatives they were chosen from, so there is nothing to compare against`,
+          ),
+        );
+      } else {
+        const cost = economy.meanCostMultiplier;
+        const gain = economy.meanGainMultiplier;
+        console.log(
+          dim(
+            `    ${economy.measurable} of ${economy.steps} step(s) had a real choice; ` +
+              `cheapest-first would have differed at ${economy.disagreements}`,
+          ),
+        );
+        if (economy.disagreements === 0) {
+          console.log(
+            dim(
+              '    at every step the cheapest probe was also the one EIG selected —\n' +
+                '    on these fixtures the ranking bought nothing over picking the cheapest',
+            ),
+          );
+        } else if (cost !== null && gain !== null) {
+          console.log(
+            dim(
+              `    where they differed: ${cost.toFixed(2)}x the cost for ` +
+                `${gain.toFixed(2)}x the expected information`,
+            ),
+          );
+        }
+        if (economy.unmeasured > 0) {
+          console.log(dim(`    ${economy.unmeasured} step(s) unmeasured`));
+        }
+        if (economy.rankingViolations > 0) {
+          console.log(
+            `    ${bold(`${economy.rankingViolations} step(s) violate the ranking rule`)} ` +
+              dim('— the cheapest probe had better gain-per-cost; this is a bug, not a result'),
+          );
+        }
+      }
+    }
+
     // Worth naming when it happens, because it is the opposite of what a
     // reader expects a threshold table to show.
     const inverted = rows.filter((r) => r.acted > 0 && r.contradicted === r.acted);
@@ -129,6 +182,14 @@ async function main(): Promise<void> {
       'figure would describe the fixture author rather than the model. The same',
       'caution applies to the entropy removed: the prior was scripted, so the',
       'posterior is a consequence of the script.',
+      '',
+      'Probe economy compares EIG selection against cheapest-first at each',
+      'recorded step, and only there. It deliberately reports no trajectory',
+      'total: running a different probe first would have produced a different',
+      'observation and a different posterior, so every step after the first is',
+      'unknowable from a trail that policy never generated. A cost multiplier',
+      'above the gain multiplier means the ranking is not paying for itself on',
+      'these fixtures, and the run prints that rather than hiding it.',
       '',
       'The live instrument is examples/fsi/eval/perturb.ts. It has never been run.',
     ])}`,

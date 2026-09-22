@@ -206,6 +206,125 @@ export function resolution(records: readonly DecisionRecord[]): ResolutionSummar
 }
 
 /**
+ * What EIG-ordered probe selection cost, and what it bought, against the
+ * obvious alternative of just running the cheapest probe available.
+ *
+ * Read only from `ProbeRecord.considered`, which records the option set as it
+ * was assessed at that step.
+ *
+ * **This is deliberately per-step and myopic, and it does not extrapolate.**
+ * The tempting version of this metric sums the cheapest probe's cost at every
+ * step and reports it as "what cheapest-first would have spent". That number
+ * would be wrong: picking a different probe at step one produces a different
+ * observation, a different posterior, and therefore a different option set at
+ * step two. Only the first step of the alternative trajectory is knowable from
+ * a trail the alternative did not generate. So every figure here compares the
+ * two policies *at the same recorded step*, and none of them claims a total.
+ */
+export interface ProbeEconomy {
+  /** Probe steps seen in total. */
+  steps: number;
+  /** Steps whose option set had more than one probe, so a choice existed. */
+  measurable: number;
+  /**
+   * Steps that could not be assessed: `considered` absent, or only one probe
+   * available. Reported rather than dropped, so the denominator stays honest.
+   */
+  unmeasured: number;
+  /** Measurable steps where cheapest-first would have run a different probe. */
+  disagreements: number;
+  /**
+   * At disagreeing steps, mean of (chosen cost / cheapest cost).
+   *
+   * Above 1 means EIG selection is paying a premium. This is the honest cost
+   * of the sophistication, and it is the number most likely to be unflattering.
+   */
+  meanCostMultiplier: number | null;
+  /**
+   * At disagreeing steps, mean of (chosen gain / cheapest gain).
+   *
+   * Above 1 means the premium bought more information. Compare against
+   * `meanCostMultiplier`: buying 1.1x the information for 3x the cost is a
+   * loss, and the table should be able to show that.
+   */
+  meanGainMultiplier: null | number;
+  /**
+   * Steps where the cheapest probe had a strictly better gain-per-cost than
+   * the probe actually chosen.
+   *
+   * Under the shipped `byCostEfficiency` ranking this is zero by construction,
+   * so it is a consistency check on the recorded trail, not evidence that the
+   * selector is good. A non-zero value means the trail and the ranking rule
+   * disagree — a bug in the example, not an interesting result.
+   */
+  rankingViolations: number;
+}
+
+function ratio(numerator: number, denominator: number): number | null {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) return null;
+  if (denominator <= 0) return null;
+  return numerator / denominator;
+}
+
+function mean(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((total, v) => total + v, 0) / values.length;
+}
+
+export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
+  let steps = 0;
+  let unmeasured = 0;
+  let disagreements = 0;
+  let rankingViolations = 0;
+  const costMultipliers: number[] = [];
+  const gainMultipliers: number[] = [];
+
+  for (const record of records.filter(scoreable)) {
+    for (const probe of record.probes) {
+      steps += 1;
+      const options = probe.considered ?? [];
+
+      // One option is not a choice, and no options is no record of one.
+      if (options.length < 2) {
+        unmeasured += 1;
+        continue;
+      }
+
+      const cheapest = options.reduce((best, o) => (o.costUnits < best.costUnits ? o : best));
+      if (cheapest.probeId === probe.probeId) continue;
+
+      disagreements += 1;
+
+      const costMultiple = ratio(probe.costUnits, cheapest.costUnits);
+      if (costMultiple !== null) costMultipliers.push(costMultiple);
+
+      const gainMultiple = ratio(probe.expectedInformationGain, cheapest.expectedInformationGain);
+      if (gainMultiple !== null) gainMultipliers.push(gainMultiple);
+
+      const chosenEfficiency = ratio(probe.expectedInformationGain, probe.costUnits);
+      const cheapestEfficiency = ratio(cheapest.expectedInformationGain, cheapest.costUnits);
+      if (
+        chosenEfficiency !== null &&
+        cheapestEfficiency !== null &&
+        cheapestEfficiency > chosenEfficiency
+      ) {
+        rankingViolations += 1;
+      }
+    }
+  }
+
+  return {
+    steps,
+    measurable: steps - unmeasured,
+    unmeasured,
+    disagreements,
+    meanCostMultiplier: mean(costMultipliers),
+    meanGainMultiplier: mean(gainMultipliers),
+    rankingViolations,
+  };
+}
+
+/**
  * Sweeps the mass threshold across its useful range, holding the other two at
  * the values the examples actually ship. Varying one knob at a time is the only
  * way the resulting column is attributable to anything.
