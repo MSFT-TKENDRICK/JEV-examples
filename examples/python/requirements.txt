@@ -1,0 +1,4 @@
+# The LangChain integration for TypeSafe is Python-only and pre-1.0.
+# Pin it: 0.0.1a3 already has one breaking change behind it.
+langchain-typesafe[experimental]==0.0.1a3
+langchain>=1.0.0

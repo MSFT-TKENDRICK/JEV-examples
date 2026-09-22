@@ -1,0 +1,22 @@
+{
+  "name": "jev-examples",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runnable examples showing how to use TypeSafe AI's Jev decision model via the Vercel AI Gateway.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "quickstart": "node examples/01-quickstart.ts",
+    "judge": "node examples/02-judge-rubrics.ts",
+    "harness": "node examples/03-agent-harness.ts",
+    "browser": "node examples/04-browser-use.ts",
+    "all": "node examples/01-quickstart.ts && node examples/02-judge-rubrics.ts && node examples/03-agent-harness.ts && node examples/04-browser-use.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
