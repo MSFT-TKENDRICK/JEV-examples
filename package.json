@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "check:foundation": "node src/ledger.check.ts && node src/information-gain.check.ts && node src/mock-fetch.check.ts && node src/compensate.check.ts && node src/frontier.check.ts",
     "check:eval": "node examples/fsi/eval/sweep.check.ts",
-    "check": "npm run check:foundation && npm run check:eval && npm run check:media",
+    "check": "npm run typecheck && npm run check:foundation && npm run check:eval && npm run check:media",
     "readme": "node scripts/assemble-readme.ts",
     "readme:check": "node scripts/assemble-readme.ts --check",
     "check:media": "node scripts/media-check.ts"
