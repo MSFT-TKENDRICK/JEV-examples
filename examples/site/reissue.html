@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Meridian - Re-issue VAT invoice</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-peek='{}'>
+    <header><span class="logo">Meridian</span></header>
+
+    <main>
+      <h1>Re-issue VAT invoice</h1>
+      <p class="lede">Re-issue VAT invoice INV-2025-09-4471. Set the invoice period and a delivery address, then submit. Submitting sends the request to the billing provider and cannot be undone.</p>
+
+      <ul class="affordances">
+        <li><input type="text" aria-label="Invoice period" placeholder="Invoice period" data-field="e1" /></li>
+        <li><input type="text" aria-label="Delivery email" placeholder="Delivery email" data-field="e2" /></li>
+        <li><button title="Meridian / Request received" data-destructive="true" onclick="location.href='submitted.html'">Submit re-issue request</button></li>
+        <li><a href="charge-sep-2025.html" title="Meridian / September 2025 charge" data-enabled="false">Back to charge</a></li>
+      </ul>
+    </main>
+
+    <footer><span class="muted">Meridian Software Ltd</span></footer>
+  </body>
+</html>

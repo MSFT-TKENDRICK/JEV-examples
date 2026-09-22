@@ -2,22 +2,31 @@
  * The control: a browsing policy driven by an ordinary generative model.
  *
  * This is the thing Jev is being compared against, and it is deliberately not a
- * straw man. It gets the same page description, the same task and the same
- * driver. It uses `generateObject` from the Vercel AI SDK with a strict schema,
- * which is the standard way to make a language model drive a UI.
+ * straw man. It gets the same page description, the same task, the same loop
+ * and the same driver. It uses `generateObject` from the Vercel AI SDK with a
+ * strict schema, which is the standard way to make a language model drive a UI.
+ * It is even allowed to report that it has hit a dead end, so that it can ask
+ * to back up - the schema below has `deadEnd` for exactly that reason.
  *
- * The difference is what comes back. This returns one element id and a
- * self-reported confidence. Self-reported confidence is a token the model
- * chose, drawn from the same distribution as the rest of its output — it is
- * not a measurement of anything, and it is well known to be poorly calibrated.
- * So a harness built on it has nothing trustworthy to gate on: either you
- * believe the number, or you act on every answer. This arm acts on every
- * answer, which is what most agents in production actually do.
+ * The difference is what comes back: one element id, plus a self-reported
+ * confidence. Self-reported confidence is a token the model chose, drawn from
+ * the same distribution as the rest of its output - it is not a measurement,
+ * and it is well known to be poorly calibrated. More importantly for this
+ * repo, one id is one id. It ranks nothing else, so:
+ *
+ *   - the beam is one wide, and "back up to the second-best branch" has no
+ *     second-best to name, even when the agent correctly asks to back up;
+ *   - the prior is a point mass, so expected information gain is exactly zero
+ *     for every probe and probe selection has nothing to choose between.
+ *
+ * Neither of those is a claim about model quality. A generative model made to
+ * emit scores over the candidate list would drive the same machinery. The
+ * deficiency is in the single answer.
  *
  * With `AI_GATEWAY_API_KEY` set this is a real Gateway call and the latency in
  * the comparison is a real measurement. Without one it replays a script
- * through `MockLanguageModelV4` and sleeps for `CONTROL_THINK_MS` to stand in
- * for generation time. That stand-in is declared everywhere it is shown.
+ * through `MockLanguageModelV4` and sleeps for `thinkMs` to stand in for
+ * generation time. That stand-in is declared everywhere it is shown.
  */
 
 import { generateObject } from 'ai';
@@ -27,37 +36,51 @@ import type { LanguageModel } from 'ai';
 import type { LanguageModelV4GenerateResult } from '@ai-sdk/provider';
 import { z } from 'zod';
 
-import type { PageView } from './browser-driver.ts';
+import type { Judge } from './site/walk.ts';
+import { describe } from './site/walk.ts';
+import { TASK } from './site/graph.ts';
 
 export const browseSchema = z.object({
-  done: z.boolean().describe('True if the answer is already visible on this page.'),
-  answer: z.string().describe('The answer, if done. Otherwise an empty string.'),
-  elementId: z.string().describe('The id of the element to click next, or "none" if done.'),
+  done: z.boolean().describe('True if the task has been carried out and the page confirms it.'),
+  atTarget: z
+    .boolean()
+    .describe('True if the action the task asks for is performed on this page, not a later one.'),
+  deadEnd: z.boolean().describe('True if this page proves the current route cannot work.'),
+  elementId: z.string().describe('The id of the element to action next, or "none".'),
   confidence: z.number().min(0).max(1).describe('How sure you are, from 0 to 1.'),
 });
 
 export type BrowseAction = z.infer<typeof browseSchema>;
 
 /** Gateway model id for the control arm. Override with CONTROL_MODEL. */
-const CONTROL_MODEL = process.env['CONTROL_MODEL'] ?? 'openai/gpt-5.6-terra';
+export const CONTROL_MODEL = process.env['CONTROL_MODEL'] ?? 'openai/gpt-5.6-terra';
 
 /** Stand-in generation latency when there is no key. Declared, not measured. */
 export const CONTROL_THINK_MS = Number(process.env['CONTROL_THINK_MS'] ?? 2600);
 
-export interface ControlAgent {
-  modelId: string;
-  live: boolean;
-  act(page: PageView, task: string, history: string[]): Promise<BrowseAction>;
+export interface ControlOptions {
+  /** Scripted replies per page id, for offline runs. */
+  scripted: Record<string, BrowseAction>;
+  /** Overrides the stand-in generation latency. */
+  thinkMs?: number;
+  label?: string;
 }
 
-export function createControlAgent(scripted: Record<string, BrowseAction>): ControlAgent {
+/**
+ * The control arm as a `Judge`, so it runs through the identical loop.
+ *
+ * `beamWidth: 1` is not a handicap applied to it. It is what a single answer
+ * affords: there is no second path to keep, because no second path was named.
+ */
+export function createControlJudge(options: ControlOptions): Judge & { live: boolean } {
   const live = Boolean(process.env['AI_GATEWAY_API_KEY']) && process.env['JEV_MOCK'] !== '1';
+  const thinkMs = options.thinkMs ?? CONTROL_THINK_MS;
 
   let current: BrowseAction | undefined;
   const replay = async (): Promise<LanguageModelV4GenerateResult> => {
-    // The sleep is inside the model, not around the call, so the measured
+    // The sleep is inside the model, not around the call, so a measured
     // decision time covers the same span it would for a real generation.
-    await new Promise((done) => setTimeout(done, CONTROL_THINK_MS));
+    if (thinkMs > 0) await new Promise((done) => setTimeout(done, thinkMs));
     return {
       content: [{ type: 'text', text: JSON.stringify(current) }],
       finishReason: { unified: 'stop', raw: 'stop' },
@@ -74,13 +97,17 @@ export function createControlAgent(scripted: Record<string, BrowseAction>): Cont
     : new MockLanguageModelV4({ doGenerate: replay });
 
   return {
-    modelId: CONTROL_MODEL,
+    label: options.label ?? 'control',
+    detail: `${live ? CONTROL_MODEL : `${CONTROL_MODEL} replayed`}, one id per page, beam width 1`,
+    beamWidth: 1,
     live,
-    async act(page, task, history) {
-      current = scripted[page.url] ?? {
+
+    async judge(site, history) {
+      current = options.scripted[site.id] ?? {
         done: false,
-        answer: '',
-        elementId: page.elements[0]?.id ?? 'none',
+        atTarget: false,
+        deadEnd: false,
+        elementId: site.elements[0]?.id ?? 'none',
         confidence: 0.5,
       };
 
@@ -88,14 +115,23 @@ export function createControlAgent(scripted: Record<string, BrowseAction>): Cont
         model,
         schema: browseSchema,
         system:
-          'You are browsing a website to answer a question. You are given the ' +
-          'visible text and the clickable elements. Choose the single element ' +
-          'most likely to lead to the answer, or report done when the answer ' +
-          'is already on the page. Never invent an element id.',
-        prompt: JSON.stringify({ task, page, history }),
+          'You are browsing a website to carry out a task. You are given the visible text and ' +
+          'the actionable elements. Choose the single element most likely to advance the task, ' +
+          'and say whether the task is done, whether it is carried out on this page, and whether ' +
+          'this page proves the route cannot work. Never invent an element id.',
+        prompt: JSON.stringify({ task: TASK, page: describe(site, history) }),
       });
 
-      return object;
+      // The whole of the difference. One id becomes all of the mass, because
+      // one id is all there was.
+      return {
+        prior: { [object.elementId]: 1 },
+        signals: {
+          goalMet: object.done ? 0.97 : 0.02,
+          atTarget: object.atTarget ? 0.93 : 0.05,
+          deadEnd: object.deadEnd ? 0.94 : 0.03,
+        },
+      };
     },
   };
 }
