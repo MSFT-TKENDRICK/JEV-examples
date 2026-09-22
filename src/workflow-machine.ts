@@ -569,7 +569,7 @@ export function bindArguments(
         rejections.push({
           slot: slot.name,
           proposed: value ?? '(absent)',
-          reason: 'cannot derive: the record it depends on did not bind',
+          reason: unboundFieldReason(slot, from, value, snapshot, known),
         });
         continue;
       }
@@ -655,6 +655,41 @@ function slotOrder(slot: SlotSpec): number {
   return slot.kind === 'record_reference' ? 0 : 1;
 }
 
+/**
+ * Explains why a derived field could not be bound when its record did not bind.
+ *
+ * Worth being specific rather than emitting one cascade message for everything.
+ * A merchant identifier is independently checkable against the directory, so say
+ * so. An amount is not: money is only authoritative *relative to a transaction*,
+ * and "£264.99" is neither right nor wrong until it is attached to one. Saying
+ * that plainly is more useful to a reviewer than pretending the check was the
+ * same in both cases.
+ */
+function unboundFieldReason(
+  slot: SlotSpec,
+  from: SlotSpec['derivedFrom'],
+  value: string | undefined,
+  snapshot: AuthoritySnapshot,
+  known: string,
+): string {
+  if (value === undefined) return 'cannot derive: the record it depends on did not bind';
+
+  if (from?.field === 'merchantId') {
+    return findMerchant(snapshot, value) === undefined
+      ? `no merchant with this identifier in ${known}`
+      : `merchant exists in ${known}, but the transaction it must match did not bind`;
+  }
+
+  if (from?.field === 'amountMinor') {
+    return (
+      'cannot be checked on its own: an amount is authoritative only relative to a ' +
+      `transaction, and the referenced transaction did not resolve in ${known}`
+    );
+  }
+
+  return 'cannot derive: the record it depends on did not bind';
+}
+
 /** The bound arguments as plain strings, for the ledger and the report. */
 export function plainArguments(
   bound: Readonly<Record<string, BoundValue>>,
@@ -663,11 +698,15 @@ export function plainArguments(
 }
 
 /**
- * Fills the slots code owns, so a model is never asked for them.
+ * Fills the slots code already knows the answer to, so a model is never asked.
  *
- * Callback times come from the scheduler. Dispute narratives are the customer's
- * exact words. Derived fields come from the record. What is left for a model is
- * only the choice among candidate identifiers.
+ * This is the "route work away from Jev" rule made concrete. Callback times come
+ * from the scheduler. Dispute narratives are the customer's exact words. Derived
+ * fields come from the record. The card is whichever card the servicing channel
+ * already resolved before any model ran, and a single open case is not a choice.
+ *
+ * What is left for a model is only the genuinely open question: which of several
+ * real transactions the customer meant.
  */
 export function deterministicArguments(
   step: StepSpec,
@@ -679,16 +718,37 @@ export function deterministicArguments(
     if (slot.kind === 'scheduler_slot') {
       const first = context.snapshot.callbackSlots[0];
       if (first) filled[slot.name] = first.slotId;
+      continue;
     }
-    if (slot.kind === 'source_span') {
+    if (slot.kind === 'source_span' || slot.kind === 'untrusted_note') {
       const source = context.sources[0];
       if (source) filled[slot.name] = source.text;
+      continue;
     }
-    if (slot.kind === 'untrusted_note') {
-      const source = context.sources[0];
-      if (source) filled[slot.name] = source.text;
+    if (slot.kind === 'record_reference' && slot.recordType === 'card') {
+      filled[slot.name] = context.cardId;
+      continue;
+    }
+    if (slot.kind === 'record_reference' && slot.recordType === 'case') {
+      const open = context.snapshot.cases.filter((entry) => entry.status === 'open');
+      const only = open.length === 1 ? open[0] : undefined;
+      if (only) filled[slot.name] = only.caseId;
     }
   }
 
   return filled;
+}
+
+/**
+ * The slots a model is actually asked about: candidate-selection slots that code
+ * could not already fill. Usually one, often none.
+ */
+export function slotsNeedingSelection(
+  step: StepSpec,
+  context: WorkflowContext,
+): readonly SlotSpec[] {
+  const known = deterministicArguments(step, context);
+  return step.slots.filter(
+    (slot) => slot.filledBy === 'candidate_selection' && known[slot.name] === undefined,
+  );
 }

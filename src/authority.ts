@@ -139,7 +139,7 @@ export interface AuthoritySnapshot {
 }
 
 /** Mutable seed state, written only by `applyOutOfBandChange`. */
-interface AuthorityState {
+export interface AuthorityState {
   account: AccountRecord;
   cards: CardRecord[];
   transactions: TransactionRecord[];
