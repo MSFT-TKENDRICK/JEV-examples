@@ -270,7 +270,7 @@ function main(): void {
   // checkAnchors() already normalized for its own regex and said why in its
   // doc comment. The lesson was learned at one call site and not carried to
   // this one, 116 lines away, which was never edited and so never re-read.
-  const original = readFileSync(README, 'utf8').replace(/\r\n/g, '\n');
+  const original = readFileSync(README, 'utf8');
   const lines = original.split('\n');
 
   const found = regions(lines);
