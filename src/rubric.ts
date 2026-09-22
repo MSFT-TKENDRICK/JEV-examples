@@ -1,12 +1,18 @@
 /**
- * Helpers for turning Jev's raw answers into decisions.
+ * Helpers for turning Jev's answers into decisions.
  *
  * The important idea: Jev returns a calibrated judgment, not a verdict. Your
  * code owns the weights, the thresholds and the escalation policy. Everything
- * here is deliberately small and boring so it stays yours to tune.
+ * here is deliberately small and boring so it stays yours to tune — the SDK
+ * gives you the measurement, this file is the part you were always going to
+ * write yourself.
  */
 
-import type { EvaluationResult, QuestionMap, ScoreAnswer } from './jev.ts';
+import type { ScoreResponse } from '@typesafe-ai/sdk';
+
+/** Any answer carrying a probability distribution. */
+type Distributed = { readonly probabilities: { readonly [key: string]: number } };
+type Chosen = Distributed & { readonly choice: string };
 
 /**
  * Maps a raw score onto 0..1.
@@ -60,15 +66,11 @@ export function gate(value: number, { pass, fail }: GateOptions): Verdict {
 /**
  * Reads the probability the model assigned to the option it actually selected.
  *
- * Distributions are optional in the spec, so this returns `undefined` rather
- * than assuming. Note this is the selected option's probability, which is a
- * different statistic from TypeSafe's `confidence`.
+ * Note this is the selected option's probability, which is a different
+ * statistic from the `confidence` the SDK reports on the same answer.
  */
-export function selectedProbability(answer: {
-  choice: string;
-  probabilities?: Record<string, number>;
-}): number | undefined {
-  return answer.probabilities?.[answer.choice];
+export function selectedProbability(answer: Chosen): number {
+  return answer.probabilities[answer.choice] ?? 0;
 }
 
 /**
@@ -76,34 +78,25 @@ export function selectedProbability(answer: {
  * committing to one. The usual response is to ask a narrower question rather
  * than to act on a coin flip.
  */
-export function isAmbiguous(
-  answer: { choice: string; probabilities?: Record<string, number> },
-  threshold = 0.6,
-): boolean {
-  const probability = selectedProbability(answer);
-  return probability === undefined ? false : probability < threshold;
+export function isAmbiguous(answer: Chosen, threshold = 0.6): boolean {
+  return selectedProbability(answer) < threshold;
 }
 
 /** Options ordered by probability, highest first. Useful for fallback candidates. */
-export function rankedOptions(answer: {
-  probabilities?: Record<string, number>;
-}): Array<{ option: string; probability: number }> {
-  if (!answer.probabilities) return [];
+export function rankedOptions(
+  answer: Distributed,
+): Array<{ option: string; probability: number }> {
   return Object.entries(answer.probabilities)
     .map(([option, probability]) => ({ option, probability }))
     .sort((a, b) => b.probability - a.probability);
 }
 
-/** Convenience wrapper that normalizes a Score answer given its question. */
-export function normalizedAnswer<Q extends QuestionMap>(
-  result: EvaluationResult<Q>,
-  questions: Q,
-  id: keyof Q & string,
-): number {
-  const question = questions[id];
-  if (!question || question.type !== 'score') {
-    throw new Error(`Question "${id}" is not a Score question`);
-  }
-  const answer = result.answers[id] as ScoreAnswer;
-  return normalizeScore(answer.score, question.criteria.length);
+/**
+ * Normalizes a Score answer to 0..1 without restating its rubric.
+ *
+ * The SDK returns the rubric as `legend` on the answer, so the level count is
+ * already there — no need to thread the question through.
+ */
+export function normalized(answer: ScoreResponse): number {
+  return normalizeScore(answer.score, Object.keys(answer.legend).length);
 }

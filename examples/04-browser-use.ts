@@ -26,9 +26,9 @@
  * Run:  node examples/04-browser-use.ts
  */
 
-import { confidenceOf, evaluate } from '../src/jev.ts';
-import type { ScriptedAnswer } from '../src/mock.ts';
-import { transportForExample } from '../src/mock.ts';
+import { choice, noul } from '@typesafe-ai/sdk';
+import { createClient } from '../src/client.ts';
+import type { ScriptedAnswer } from '../src/mock-fetch.ts';
 import { isAmbiguous, rankedOptions, selectedProbability } from '../src/rubric.ts';
 import { banner, bold, cyan, dim, green, pct, red, title, yellow } from '../src/ui.ts';
 
@@ -114,38 +114,22 @@ function buildQuestions(page: Page) {
 
   return {
     // The model selects from real elements. It cannot invent a selector.
-    target: {
-      type: 'choice',
-      instructions:
-        'Which single element in `candidates` should be actioned next to make progress on `task`?',
-      criteria: { ...candidates, none: 'No element on this page helps with the task' },
-    },
-    verb: {
-      type: 'choice',
-      instructions: 'What interaction does the chosen element require?',
-      criteria: {
-        click: 'Press a button, link or tab',
-        type: 'Enter text into an input',
-        select: 'Choose a value from a list',
-      },
-    },
-    goalMet: {
-      type: 'boolean',
-      instructions: 'Does `visibleText` already contain the answer to `task`?',
-      criteria: {
-        true: 'The specific value asked for is present in the visible text',
-        false: 'The value is not shown yet',
-      },
-    },
-    blocked: {
-      type: 'boolean',
-      instructions: 'Is the page showing a login wall, paywall, captcha or hard error?',
-    },
-    looping: {
-      type: 'boolean',
-      instructions: 'Do `stepsTaken` show the same action being repeated without effect?',
-    },
-  } as const;
+    target: choice(
+      'Which single element in `candidates` should be actioned next to make progress on `task`?',
+      { ...candidates, none: 'No element on this page helps with the task' },
+    ),
+    verb: choice('What interaction does the chosen element require?', {
+      click: 'Press a button, link or tab',
+      type: 'Enter text into an input',
+      select: 'Choose a value from a list',
+    }),
+    goalMet: noul('Does `visibleText` already contain the answer to `task`?', {
+      true: 'The specific value asked for is present in the visible text',
+      false: 'The value is not shown yet',
+    }),
+    blocked: noul('Is the page showing a login wall, paywall, captcha or hard error?'),
+    looping: noul('Do `stepsTaken` show the same action being repeated without effect?'),
+  };
 }
 
 /** Scripted judgments per step, keyed by URL. */
@@ -153,23 +137,23 @@ const scripts: Record<string, Record<string, ScriptedAnswer>> = {
   '/pricing': {
     target: { choice: 'e1', strength: 0.46 },
     verb: { choice: 'click', strength: 0.97 },
-    goalMet: { probability: 0.01 },
-    blocked: { probability: 0.04 },
-    looping: { probability: 0.02 },
+    goalMet: { noul: 0.01 },
+    blocked: { noul: 0.04 },
+    looping: { noul: 0.02 },
   },
   '/pricing#plans': {
     target: { choice: 'e7', strength: 0.91 },
     verb: { choice: 'click', strength: 0.98 },
-    goalMet: { probability: 0.03 },
-    blocked: { probability: 0.02 },
-    looping: { probability: 0.02 },
+    goalMet: { noul: 0.03 },
+    blocked: { noul: 0.02 },
+    looping: { noul: 0.02 },
   },
   '/pricing/pro': {
     target: { choice: 'none', strength: 0.86 },
     verb: { choice: 'click', strength: 0.6 },
-    goalMet: { probability: 0.96 },
-    blocked: { probability: 0.01 },
-    looping: { probability: 0.02 },
+    goalMet: { noul: 0.96 },
+    blocked: { noul: 0.01 },
+    looping: { noul: 0.02 },
   },
 };
 
@@ -194,18 +178,14 @@ const MAX_STEPS = 6;
 for (let step = 0; step < MAX_STEPS; step++) {
   const questions = buildQuestions(page);
   const script = scripts[page.url] ?? {};
-  const picked = transportForExample(() => script);
+  const picked = createClient(() => script);
   live = picked.live;
   if (step === 0) banner(live);
 
   const state = describe(page, history);
-  const result = await evaluate({
-    state,
-    questions,
-    ...(picked.transport && { transport: picked.transport }),
-  });
+  const { answers } = await picked.client.systemOne({ state, questions });
 
-  const { target, verb, goalMet, blocked, looping } = result.answers;
+  const { target, verb, goalMet, blocked, looping } = answers;
   const targetProbability = selectedProbability(target);
 
   console.log(`\n${bold(`step ${step + 1}`)}  ${cyan(page.url)}`);
@@ -216,24 +196,24 @@ for (let step = 0; step < MAX_STEPS; step++) {
   );
   console.log(
     `  target=${target.choice} ${dim(
-      `p=${pct(targetProbability)} · confidence=${pct(confidenceOf(result, 'target'))} · ` +
-        `goalMet=${pct(goalMet.probability)}`,
+      `p=${pct(targetProbability)} · confidence=${pct(target.confidence)} · ` +
+        `goalMet=${pct(goalMet.noul)}`,
     )}`,
   );
 
   // --- Terminal conditions, checked by code, highest severity first. -------
-  if (blocked.probability >= 0.7) {
+  if (blocked.noul >= 0.7) {
     status = 'blocked';
     console.log(`  ${red('BLOCKED')} login wall or hard error`);
     break;
   }
-  if (goalMet.probability >= 0.85) {
+  if (goalMet.noul >= 0.85) {
     status = 'done';
     answer = page.text;
     console.log(`  ${green('DONE')} answer found on this page`);
     break;
   }
-  if (looping.probability >= 0.7) {
+  if (looping.noul >= 0.7) {
     status = 'stuck';
     console.log(`  ${yellow('STUCK')} repeating without effect`);
     break;

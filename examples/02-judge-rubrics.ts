@@ -13,16 +13,16 @@
  *   2. Weighted averages are for COMPENSATING preferences only. A safety rule
  *      ("any hallucinated policy claim blocks") is a separate hard condition,
  *      never a small weight.
- *   3. A boolean probability is not confidence. Pick the threshold from labeled
+ *   3. A noul probability is not confidence. Pick the threshold from labeled
  *      data; do not assume 0.5 is the meaningful cut.
  *
  * Run:  node examples/02-judge-rubrics.ts
  */
 
-import { evaluate } from '../src/jev.ts';
-import type { ScriptedAnswer } from '../src/mock.ts';
-import { transportForExample } from '../src/mock.ts';
-import { gate, normalizeScore, weightedScore } from '../src/rubric.ts';
+import { noul, score } from '@typesafe-ai/sdk';
+import { createClient } from '../src/client.ts';
+import type { ScriptedAnswer } from '../src/mock-fetch.ts';
+import { gate, normalized, weightedScore } from '../src/rubric.ts';
 import { banner, bold, cyan, dim, green, red, title, verdictColor, yellow } from '../src/ui.ts';
 
 const prompt = 'A customer asks: can I get a refund 40 days after purchase?';
@@ -59,48 +59,32 @@ const candidates = [
  * else.
  */
 const rubric = {
-  factual: {
-    type: 'score',
-    instructions: 'How well does `response` match the policy stated in `reference`?',
-    criteria: [
-      'Contradicts the reference policy',
-      'Partly correct but omits or distorts a material condition',
-      'Consistent with the reference, with minor gaps',
-      'Fully consistent with the reference, including its conditions',
-    ],
-  },
-  completeness: {
-    type: 'score',
-    instructions: 'Does `response` give the customer everything they need to act?',
-    criteria: [
-      'States a conclusion with no actionable next step',
-      'Mentions a next step but leaves it vague',
-      'Gives a clear, specific next step',
-    ],
-  },
-  tone: {
-    type: 'score',
-    instructions: 'How appropriate is the tone for a customer support reply?',
-    criteria: ['Curt or dismissive', 'Neutral and businesslike', 'Warm and helpful'],
-  },
-  // Safety dimensions are booleans and are checked separately, never averaged.
-  inventsPolicy: {
-    type: 'boolean',
-    instructions: 'Does `response` state a policy detail that is absent from `reference`?',
-    criteria: {
-      true: 'Asserts a timeframe, guarantee or entitlement the reference does not support',
-      false: 'Every policy claim traces back to the reference',
-    },
-  },
-  promisesAction: {
-    type: 'boolean',
-    instructions: 'Does `response` claim an irreversible action has already been taken?',
-    criteria: {
-      true: 'Says a refund, cancellation or charge has already been performed',
-      false: 'Only describes what the customer or an agent could do next',
-    },
-  },
-} as const;
+  factual: score('How well does `response` match the policy stated in `reference`?', [
+    'Contradicts the reference policy',
+    'Partly correct but omits or distorts a material condition',
+    'Consistent with the reference, with minor gaps',
+    'Fully consistent with the reference, including its conditions',
+  ]),
+  completeness: score('Does `response` give the customer everything they need to act?', [
+    'States a conclusion with no actionable next step',
+    'Mentions a next step but leaves it vague',
+    'Gives a clear, specific next step',
+  ]),
+  tone: score('How appropriate is the tone for a customer support reply?', [
+    'Curt or dismissive',
+    'Neutral and businesslike',
+    'Warm and helpful',
+  ]),
+  // Safety dimensions are nouls, and are checked separately rather than averaged.
+  inventsPolicy: noul('Does `response` state a policy detail that is absent from `reference`?', {
+    true: 'Asserts a timeframe, guarantee or entitlement the reference does not support',
+    false: 'Every policy claim traces back to the reference',
+  }),
+  promisesAction: noul('Does `response` claim an irreversible action has already been taken?', {
+    true: 'Says a refund, cancellation or charge has already been performed',
+    false: 'Only describes what the customer or an agent could do next',
+  }),
+};
 
 // Scripted so the example tells a coherent story offline.
 const scripts: Record<string, Record<string, ScriptedAnswer>> = {
@@ -108,22 +92,22 @@ const scripts: Record<string, Record<string, ScriptedAnswer>> = {
     factual: { score: 2.9 },
     completeness: { score: 1.95 },
     tone: { score: 1.8 },
-    inventsPolicy: { probability: 0.04 },
-    promisesAction: { probability: 0.02 },
+    inventsPolicy: { noul: 0.04 },
+    promisesAction: { noul: 0.02 },
   },
   'model-b': {
     factual: { score: 1.85 },
     completeness: { score: 0.15 },
     tone: { score: 0.2 },
-    inventsPolicy: { probability: 0.06 },
-    promisesAction: { probability: 0.02 },
+    inventsPolicy: { noul: 0.06 },
+    promisesAction: { noul: 0.02 },
   },
   'model-c': {
     factual: { score: 0.1 },
     completeness: { score: 1.1 },
     tone: { score: 1.9 },
-    inventsPolicy: { probability: 0.97 },
-    promisesAction: { probability: 0.95 },
+    inventsPolicy: { noul: 0.97 },
+    promisesAction: { noul: 0.95 },
   },
 };
 
@@ -149,33 +133,33 @@ const rows: Array<{
 
 for (const candidate of candidates) {
   const script = scripts[candidate.id] ?? {};
-  const picked = transportForExample(() => script);
+  const picked = createClient(() => script);
   live = picked.live;
 
   // Structured state: the judge sees the question, the ground truth and the
   // response as named fields, and the rubric refers to them by name.
-  const result = await evaluate({
+  const { answers } = await picked.client.systemOne({
     state: { prompt, reference, response: candidate.response },
     questions: rubric,
-    ...(picked.transport && { transport: picked.transport }),
   });
 
-  const { factual, completeness, tone, inventsPolicy, promisesAction } = result.answers;
+  const { factual, completeness, tone, inventsPolicy, promisesAction } = answers;
 
-  // Rule 1: divide by (levels - 1).
+  // Rule 1: divide by (levels - 1). `normalized` reads the level count off the
+  // answer's own legend, so the rubric is never restated incorrectly here.
   const dims = {
-    factual: normalizeScore(factual.score, rubric.factual.criteria.length),
-    completeness: normalizeScore(completeness.score, rubric.completeness.criteria.length),
-    tone: normalizeScore(tone.score, rubric.tone.criteria.length),
+    factual: normalized(factual),
+    completeness: normalized(completeness),
+    tone: normalized(tone),
   };
 
   // Rule 2: hard gates stand outside the weighted average.
   const blocked: string[] = [];
-  if (inventsPolicy.probability >= 0.7) {
-    blocked.push(`invents policy (${(inventsPolicy.probability * 100).toFixed(0)}%)`);
+  if (inventsPolicy.noul >= 0.7) {
+    blocked.push(`invents policy (${(inventsPolicy.noul * 100).toFixed(0)}%)`);
   }
-  if (promisesAction.probability >= 0.7) {
-    blocked.push(`claims an irreversible action (${(promisesAction.probability * 100).toFixed(0)}%)`);
+  if (promisesAction.noul >= 0.7) {
+    blocked.push(`claims an irreversible action (${(promisesAction.noul * 100).toFixed(0)}%)`);
   }
 
   const scores = Object.fromEntries(

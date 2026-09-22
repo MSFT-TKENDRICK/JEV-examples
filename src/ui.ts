@@ -20,8 +20,20 @@ export function title(text: string): void {
 export function banner(live: boolean): void {
   console.log(
     live
-      ? dim('transport: live Vercel AI Gateway (typesafe-ai/jev)')
-      : dim('transport: offline mock — set AI_GATEWAY_API_KEY for live Jev calls'),
+      ? dim('transport: live TypeSafe API (@typesafe-ai/sdk)')
+      : dim('transport: offline mock — set TYPESAFE_API_KEY for live Jev calls'),
+  );
+}
+
+/** Turns a score answer's `legend` into bar-chart labels. */
+export function legendLabels(legend: {
+  readonly [score: string]: unknown;
+}): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(legend).map(([index, description]) => [
+      index,
+      `${index} ${typeof description === 'string' ? description : ''}`.trimEnd(),
+    ]),
   );
 }
 

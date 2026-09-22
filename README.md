@@ -1,11 +1,14 @@
 # Jev examples
 
 Working examples of [Jev](https://docs.typesafe.ai) — TypeSafe AI's "System One"
-evaluation model — called through the [Vercel AI Gateway](https://vercel.com/ai-gateway/models/jev).
+evaluation model — using the official [`@typesafe-ai/sdk`](https://www.npmjs.com/package/@typesafe-ai/sdk),
+paired with the [Vercel AI SDK](https://ai-sdk.dev) and
+[AI Gateway](https://vercel.com/ai-gateway) for the generative half of an agent.
 
-Every example runs right now, with no API key and no `npm install`.
+Every example runs right now, with no API key.
 
 ```bash
+npm install
 node examples/01-quickstart.ts
 ```
 
@@ -20,28 +23,36 @@ already have — and a map of **typed questions**. It returns typed answers with
 probability distributions attached.
 
 ```ts
-const result = await evaluate({
+import { TypeSafeClient, choice, noul, score } from '@typesafe-ai/sdk';
+
+const client = new TypeSafeClient(); // reads TYPESAFE_API_KEY
+
+const { answers } = await client.systemOne({
   state: { subject: 'Charged twice', body: '...' },
   questions: {
-    department: { type: 'choice', instructions: 'Which team owns this?', criteria: { billing: '...', technical: '...' } },
-    severity:   { type: 'score',  instructions: 'How severe?', criteria: ['Cosmetic', 'Degraded', 'Blocked', 'Outage'] },
-    wantsRefund:{ type: 'boolean', instructions: 'Is the customer asking for money back?' },
+    department: choice('Which team owns this?', { billing: '...', technical: '...' }),
+    severity: score('How severe?', ['Cosmetic', 'Degraded', 'Blocked', 'Outage']),
+    wantsRefund: noul('Is the customer asking for money back?'),
   },
 });
 
-result.answers.department.choice;        // 'billing'  (typed to the option keys)
-result.answers.department.probabilities; // { billing: 0.52, technical: 0.30, ... }
-result.answers.severity.score;           // 2.70, continuous in [0, 3]
-result.answers.wantsRefund.probability;  // 0.97
+answers.department.choice;        // 'billing'  (typed to the option keys)
+answers.department.probabilities; // { billing: 0.52, technical: 0.30, ... }
+answers.severity.score;           // 2.70, continuous in [0, 3]
+answers.wantsRefund.noul;         // 0.97
 ```
 
 Three primitives, and that is the whole surface:
 
-| Primitive   | Question                       | You get back                                   |
-| ----------- | ------------------------------ | ---------------------------------------------- |
-| **Choice**  | Which one of these?            | `choice` + `probabilities` over your option keys |
-| **Score**   | Where on this rubric?          | `score` in `[0, levels-1]` + `probabilities` per level |
-| **Boolean** | How likely is this true?       | `probability` in `[0, 1]`                        |
+| Primitive  | Builder    | You get back                                           |
+| ---------- | ---------- | ------------------------------------------------------ |
+| **Choice** | `choice()` | `choice` + `probabilities` over your option keys        |
+| **Score**  | `score()`  | `score` in `[0, levels-1]` + `probabilities` per level  |
+| **Noul**   | `noul()`   | `noul` — a probability in `[0, 1]`                      |
+
+("Noul" is TypeSafe's term for a yes/no probability. The AI SDK renames it to
+`boolean`/`probability`; see [`docs/SDKS.md`](docs/SDKS.md) for the full
+mapping, which is where porting bugs come from.)
 
 Two properties drive the whole design:
 
@@ -136,13 +147,15 @@ both the `support-quality` and `brand-voice` rankings above.
 
 ### [`03-agent-harness.ts`](examples/03-agent-harness.ts) — Jev in a harness
 
-The loop is yours. Jev answers six questions inside it: which model to route to,
-whether a proposed command is `clear` or `caution`, whether it is irreversible,
-how much it advances the goal, whether the goal is met, and whether the agent is
-stuck.
+Two models, two jobs. The **Vercel AI SDK** (`generateObject` + `gateway`)
+proposes each next command. **Jev** judges it: which model to route to, whether
+the command is `clear` or `caution`, whether it is irreversible, how much it
+advances the goal, whether the goal is met, and whether the agent is stuck. The
+loop, the budget and every actual decision are plain TypeScript.
 
 ```
 Route  goal -> powerful (p=83.0%, confidence=34.2%)
+  proposer: openai/gpt-6-astra via MockLanguageModelV4 (ai/test)
 
 step 2  grep -c "OutOfMemoryError" /workspace/logs/checkout.log
   permission=clear p=93.0% · irreversible=2.0% · advances=2.40/3 · goalMet=18.0%
@@ -157,6 +170,9 @@ step 4  sed -n "1,80p" /workspace/logs/checkout.log
   RUN  java.lang.OutOfMemoryError: Java heap space
   DONE goal met at 93.0%
 ```
+
+The blocked command is fed back to the proposer as an `avoid` list, so the
+generative model routes around the gate instead of retrying into it.
 
 The permission gate mirrors Vercel's `eve` framework (`eve/tools/approval`,
 `auto()`), which asks exactly **one** Choice question with id `permission` and
@@ -238,29 +254,35 @@ you want a person in the path.
 ## Running the examples
 
 ```bash
+npm install
 node examples/01-quickstart.ts   # or: npm run quickstart
 npm run all                      # all four, in order
 ```
 
-There are no runtime dependencies and no build step. The examples are `.ts`
-files executed directly by **Node ≥ 22.18**, which strips types natively, and
-they use native `fetch`. `npm install` only pulls `typescript` and
-`@types/node` so that `npm run typecheck` works.
+There is no build step. The examples are `.ts` files executed directly by
+**Node ≥ 22.18**, which strips types natively. The dependencies are the real
+published SDKs — `@typesafe-ai/sdk`, `ai`, `@ai-sdk/gateway` and `zod` — and
+nothing in `src/` reimplements any of them.
 
 ### Offline by default, live with one env var
 
-Without a key, every example uses the mock transport in
-[`src/mock.ts`](src/mock.ts) and prints deterministic output. With a key, the
-exact same code calls the Gateway:
+Without a key, the examples inject a mock `fetch` into the real
+`TypeSafeClient` ([`src/mock-fetch.ts`](src/mock-fetch.ts)) and a
+`MockLanguageModelV4` from `ai/test` into the real `generateObject` call. The
+SDKs' request building, validation, retries and error handling all stay on the
+live code path; only the HTTP response bodies are manufactured.
+
+With a key, the exact same code calls the real services:
 
 ```bash
-export AI_GATEWAY_API_KEY=...        # get one at vercel.com/ai-gateway
+export TYPESAFE_API_KEY=...       # get one at typesafe.ai
+export AI_GATEWAY_API_KEY=...     # only needed for example 03's proposer
 node examples/01-quickstart.ts
 ```
 
-Other knobs, all optional: `JEV_MOCK=1` forces the mock even with a key,
-`JEV_MODEL` overrides `typesafe-ai/jev`, `JEV_BASE_URL` overrides the Gateway
-host. See [`.env.example`](.env.example).
+`JEV_MOCK=1` forces the mocks even with keys. The SDK also honors
+`TYPESAFE_BASE_URL`, `TYPESAFE_DEFAULT_MODEL` and `TYPESAFE_LOG_LEVEL` — see
+[`.env.example`](.env.example).
 
 **One honest caveat about the mock.** It reproduces Jev's *contract* exactly —
 distributions sum to 1, a Score is the probability-weighted mean of its levels,
@@ -274,41 +296,33 @@ numbers as illustrative, and do not port that formula.
 ## Repo layout
 
 ```
-src/jev.ts      zero-dependency Gateway client: types, transport, retries, validation
-src/mock.ts     offline transport reproducing the response contract
-src/rubric.ts   normalizeScore, weightedScore, gate, isAmbiguous, rankedOptions
-src/ui.ts       console formatting
-examples/       the four TypeScript examples, plus python/
-docs/PROTOCOL.md  the wire protocol and the experimental_evaluate migration
+src/client.ts     createClient() — real TypeSafeClient, mock fetch when offline
+src/mock-fetch.ts offline Fetch answering POST /v1/systemone
+src/proposer.ts   the AI SDK half: generateObject + gateway, MockLanguageModelV4 offline
+src/rubric.ts     normalizeScore, weightedScore, gate, isAmbiguous, rankedOptions
+src/ui.ts         console formatting
+examples/         the four TypeScript examples, plus python/
+docs/SDKS.md      which SDK to use, and the naming trap between them
 ```
 
-### Why a hand-written client instead of the AI SDK
+Everything in `src/` is composition and presentation. There is no hand-written
+API client here: `@typesafe-ai/sdk` already does request building, literal-typed
+answers, retry-with-jitter and typed errors, and the AI SDK already does
+structured generation and Gateway routing.
 
-The official API is `experimental_evaluate` from the `ai` package. It is
-documented and it exists in `vercel/ai` on `main` — but it is **not in a
-published release**: `ai@7.0.101` does not export it, nor do the current
-`canary` or `beta` tags, and `@ai-sdk/typesafe-ai` is not yet resolvable.
+### About `experimental_evaluate`
 
-So [`src/jev.ts`](src/jev.ts) speaks the Gateway's evaluation-model protocol
-directly, using the same request shape and the same types that
-`@ai-sdk/gateway` uses. When the export ships, the migration is a swap at the
-call site:
-
-```diff
--import { evaluate } from '../src/jev.ts';
--const result = await evaluate({ state, questions });
-+import { experimental_evaluate as evaluate } from 'ai';
-+const result = await evaluate({ model: 'typesafe-ai/jev', state, questions });
-```
-
-The question and answer shapes are identical, so the rubric helpers and every
-example body carry over unchanged. [`docs/PROTOCOL.md`](docs/PROTOCOL.md) has
-the full mapping, including the AI SDK's `boolean`/`probability` vocabulary
-versus native TypeSafe's `Noul`/`noul`, and where confidence lives in each.
+The AI SDK has a first-class evaluation API, `experimental_evaluate`, which is
+documented and merged in `vercel/ai` — but **not in a published release**.
+`ai@7.0.101` does not export it, `@ai-sdk/gateway@4.0.81` has no
+`evaluationModel`, and `@ai-sdk/typesafe-ai` is not resolvable. So Jev is called
+through its own SDK, and the AI Gateway is used for what it can do today:
+generation. When the export ships, the question and answer shapes map
+one-to-one — [`docs/SDKS.md`](docs/SDKS.md) has the table.
 
 **Not verified here:** no request in this repo has been run against the live
-Gateway — there was no API key in the build environment. The protocol is read
-from `vercel/ai` source, not from a captured response.
+TypeSafe API or the live Gateway — there was no API key in the build
+environment.
 
 ---
 
