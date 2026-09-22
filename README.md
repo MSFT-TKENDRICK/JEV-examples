@@ -16,15 +16,23 @@ node examples/01-quickstart.ts
 
 ### Jev vs a conventional generative agent
 
-![Jev and a control model browsing the same site side by side](docs/media/jev-vs-control.gif)
+Same maze, same driver, same click mechanics — only the decision model differs.
+[`06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) walks the fourteen-page
+site twice: once keeping the distribution, once collapsing it to the argmax a
+conventional `generateObject` agent would return. Run it with `npm run compare`;
+it prints both arms and the divergence between them.
 
-Same task, same page, same driver, same click mechanics — only the decision
-model differs. Left is Jev; right is an ordinary `generateObject` agent. Jev has
-already decided and escalated the ambiguous cookie banner to a human while the
-control is still generating. Produced by
-[`06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) with `npm run compare`;
-read [what is and is not measured](#06-jev-vs-controlts--jev-against-a-control-model)
-before drawing conclusions from the clock.
+The difference is not that one arm is faster. It is that the arm which keeps the
+distribution can rank an alternative, backtrack to it, and price a probe, and the
+arm which keeps one answer can do none of those — expected information gain over
+a point mass is exactly zero for every probe. Read
+[what is and is not measured](#06-jev-vs-controlts--jev-against-a-control-model)
+before drawing conclusions from either arm.
+
+06 is a terminal program and records nothing. The recorded example is
+[`05-browser-live.ts`](examples/05-browser-live.ts), which drives a real browser
+over the same site and writes
+[`docs/media/browser-use.mp4`](docs/media/browser-use.mp4) with `webreel`.
 
 ---
 
@@ -1495,30 +1503,31 @@ chosen by their authors. `npm run fsi:eval` runs both examples as subprocesses,
 reads their ledgers back, and re-scores every recorded decision against a sweep
 of thresholds. Nothing in either pipeline is reimplemented to do it.
 
-The table trades coverage against escalation, which is the ordinary reason to
+The table trades acting against investigating, which is the ordinary reason to
 sweep a threshold. The column that matters is the last one: decisions that
 **passed every distribution test and were then vetoed by deterministic code**.
 That column is computed, not labelled — it falls out of comparing each recorded
 decision's metrics against its own recorded thresholds and then reading whether
 the executed action diverged from the recommendation.
 
-There are two such decisions, one per example, and the sweep shows they do not
-go away:
+There are three such decisions, two in example 07 and one in example 08, and
+the sweep shows they do not go away. Example 08's half of the table:
 
 ```
-  min mass  scored  accepted  escalated  contradicted
-      0.50       4         2          2             1
+  min mass  scored    acts  investigates  contradicted
+      0.50       7       5             2             1
       ...
-      0.90       4         1          3             1
-      0.95       4         0          4             0
+      0.90       7       4             3             1
+      0.95       7       0             7             0
 ```
 
-At `0.90`, example 08 accepts exactly one decision and it is the wrong one. The
-`91%` recommendation to run a key-rotation runbook against a host that was not
-in the incident's affected set survives every tightening that does not shut the
-automation off entirely, because it was never an uncertain answer — it was a
-confident answer to a question asked against stale state. Raising the bar
-discarded the sound acceptance first.
+The `91%` recommendation to run a key-rotation runbook against a host that was
+not in the incident's affected set clears every threshold up to `0.90`. Only
+`0.95` excludes it, and `0.95` also shuts the automation off entirely — nothing
+is acted on at all. It survives the tightening because it was never an uncertain
+answer: it was a confident answer to a question asked against stale state.
+Raising the bar discarded the sound acceptances first and left the wrong one
+until the column reached zero.
 
 That is the argument for keeping the deterministic preconditions, not for
 picking a better number. A threshold sweep can buy you coverage or caution. It
@@ -1640,7 +1649,7 @@ src/runbook-catalog.ts   the bounded runbook option set for example 08
 src/log-redact.ts     configured-field redaction for ledger payloads
 examples/             the six TypeScript examples, plus site/ and python/
 examples/fsi/         the two FSI examples and the eval harness
-docs/media/           recordings produced by examples 05 and 06
+docs/media/           the recording produced by example 05
 docs/SDKS.md          which SDK to use, and the naming trap between them
 docs/CLAIM-CONTRACTS.md  what each FSI example is and is not allowed to claim
 docs/FSI-BOUNDARIES.md   where the domain scope stops
@@ -1677,7 +1686,7 @@ environment.
 
 ## Not yet answered by this repository
 
-This repo is deliberately narrow. It shows Jev used through the published `@typesafe-ai/sdk`, with ordinary TypeScript code building a bounded question, receiving a distribution, and applying an abstention or escalation rule outside the model. That is real application control flow. It is not evidence that the returned distribution is correct, calibrated, stable, or safe to automate in a bank.
+This repo is deliberately narrow. It shows Jev used through the published `@typesafe-ai/sdk`, with ordinary TypeScript code building a bounded question, receiving a distribution, and applying an abstention or probe-selection rule outside the model. That is real application control flow. It is not evidence that the returned distribution is correct, calibrated, stable, or safe to automate in a bank.
 
 The most important caveat is also the simplest: **nothing in this repository has ever been run against the live TypeSafe API.** No API key was used to produce anything you see here. Every Choice, Score, Noul, probability table, example output, and recording shown here is driven by manufactured responses from [`src/mock-fetch.ts`](src/mock-fetch.ts). The mock exercises the SDK request path and the surrounding policy code; it also manufactures both the selected answer and the shape of the distribution. An offline run proves the harness behaves under scripted model outputs. It does not tell you how the real service answers, how confident it is, how long it takes, or how often it is available.
 
@@ -1691,7 +1700,7 @@ Open questions before this pattern belongs near production:
 4. **Evidence beyond fixtures.** The FSI examples can show what the policy would do for scripted confident, ambiguous, malformed, timeout, and fallback cases, and [`examples/fsi/eval/`](examples/fsi/eval) can show how that policy's behaviour moves as its thresholds move. Both operate over manufactured distributions. They do not measure model quality, risk coverage, service reliability, or live cost.
 5. **Degraded operation.** The examples include fail-closed branches, but not production timeout budgets, retry policy, idempotency keys, duplicate-request handling, circuit breakers, fallback UX, or queue operations when the service is slow or unavailable.
 6. **Change governance.** Candidate catalogs, thresholds, eligibility rules, prompt wording, SDK versions, and service versions are all control surfaces. This repo does not define who approves changes, how they are tested, how rollback works, or how evidence is retained.
-7. **Automation bias.** Escalation to a human is not automatically a control. Reviewers can anchor on the preselected answer, rubber-stamp queues under load, or lack the evidence needed to disagree. That operational design is outside the repo.
+7. **Automation bias, and what replaced it.** Escalation to a human is not automatically a control: reviewers anchor on the preselected answer, rubber-stamp queues under load, or lack the evidence needed to disagree. These examples do not have that failure mode, because they never route to a person — but the converse is now true and is the sharper limitation. There is no human in these loops at all, so the only things standing between a confident wrong distribution and an executed action are the deterministic preconditions and the compensating saga. Both are code in this repo, written by the same authors as the thing they check. Removing the reviewer removed the reviewer's rubber stamp and the reviewer's veto together.
 8. **Ledger trust.** Emitted JSON records are useful for replay and debugging, but they are not an audit trail merely because they exist. Immutability, completeness, access control, retention, independent verification, and tamper evidence are not implemented.
 9. **Baseline comparison.** The repo does not prove this pattern is better than rules, search, existing classifiers, metadata lookups, or asking an operator. In some domains the deterministic baseline is the right answer.
 10. **Threat model.** Bounded output prevents Jev from inventing a new option. It does not prevent malicious or stale input from shifting probability toward a harmful option that your code made eligible.
@@ -1707,7 +1716,9 @@ Those gaps do not invalidate the examples. They define what the examples are: SD
 2. **Ask them all at once.** Parallel and isolated means extra questions are
    nearly free in latency and cannot hurt each other's answers.
 3. **Keep the distribution.** The argmax throws away the most useful thing you
-   were given. A split distribution means *escalate*, not *guess*.
+   were given. A split distribution means *probe*, not *guess* — and a point
+   estimate cannot tell you which probe is worth running, because expected
+   information gain over a point mass is zero for all of them.
 4. **Confidence is concentration, not correctness.** It tells you the model was
    decisive. It does not tell you the model was right, and it is not permission
    to act.
