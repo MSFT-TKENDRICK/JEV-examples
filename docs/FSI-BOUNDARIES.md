@@ -48,8 +48,9 @@ It becomes a *safety property* only once you can show, on your own data, that:
 - option-set composition does not destabilize the probabilities;
 - the chosen threshold produces an acceptable risk/coverage tradeoff.
 
-None of that is demonstrated here. `examples/fsi/eval/` ships the instrument for
-measuring it; it does not ship results.
+None of that is demonstrated here, and none of it is measured here. The planned
+`examples/fsi/eval/` harness will ship the *instrument* for measuring it; it will
+not ship results. That harness is not yet in this repository.
 
 ### Known failure modes
 

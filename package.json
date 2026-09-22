@@ -18,7 +18,8 @@
     "fsi:08": "node examples/fsi/08-runbook-routing/index.ts",
     "fsi:eval": "node examples/fsi/eval/index.ts",
     "all": "node examples/01-quickstart.ts && node examples/02-judge-rubrics.ts && node examples/03-agent-harness.ts && node examples/04-browser-use.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "check:foundation": "node src/ledger.check.ts"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.14",

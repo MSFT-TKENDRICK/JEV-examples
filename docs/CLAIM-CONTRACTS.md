@@ -9,9 +9,9 @@ The central discipline:
 > The examples prove what the application does with a distribution, not that the
 > distribution deserves trust.
 
-Each contract below is reproduced in the header comment of the example it governs
-and in that example's README section. If a sentence you want to write is not on
-the allowed list, it does not go in.
+Each contract below must be reproduced in the header comment of the example it
+governs and in that example's README section. If a sentence you want to write is
+not on the allowed list, it does not go in.
 
 ---
 
@@ -26,12 +26,13 @@ the allowed list, it does not go in.
 - Argument binding is step-specific and accepts only authoritative record
   identifiers or exact permitted source spans.
 - The fixture proves that an unbound merchant, amount or record identifier is
-  rejected **by application code**, regardless of which model proposed it.
+  rejected **by application code**. The fixture exercises one scripted proposal;
+  the check itself does not consult which model produced it.
 - The harness requires approval for configured consequential actions.
 - Approval is a separate step from Jev's recommendation, bound to an immutable
   proposal digest and revalidated against fresh state.
-- The ledger records a difference between what Jev recommended and what the
-  application executed.
+- The ledger records Jev's recommendation and the executed action in separate
+  fields, and derives whether they differ.
 - The offline run exercises the published SDK code path with manufactured HTTP
   responses.
 
@@ -79,8 +80,10 @@ the allowed list, it does not go in.
 - The application routes ambiguous or split distributions to the ordinary
   operations queue.
 - The safe fallback does not depend on Jev returning a correct answer.
-- Log preprocessing extracts bounded diagnostic windows and redacts sensitive
-  fields deterministically, before anything is sent.
+- Log preprocessing extracts bounded diagnostic windows and deterministically
+  redacts **the configured** fields, before anything is sent. Redaction over
+  unstructured vendor log text is best-effort: content matching no configured
+  pattern survives into the request.
 - Scripted fixtures exercise confident, ambiguous, malformed-response, timeout and
   fallback paths.
 - The ledger distinguishes the recommendation from the route actually taken.
@@ -133,8 +136,9 @@ the allowed list, it does not go in.
 - It is tamper-evident, immutable, complete or independently verified.
 - It satisfies SR 11-7, OCC, FFIEC, PCI DSS, SOX or internal model-risk
   requirements.
-- It proves reproducibility, unless fixtures, code, candidate catalogs, policies
-  and service versions are all retained.
+- It proves reproducibility. A scripted run is reproducible when fixtures, code,
+  candidate catalogs, policies and service versions are all retained; a
+  `LIVE_API` run is not reproducible regardless of what is retained.
 - Hashed state is anonymous or non-sensitive.
 - Raw distributions explain why the service produced a result.
 - Evidence capture establishes validity, calibration, fairness or production
@@ -144,13 +148,17 @@ the allowed list, it does not go in.
 
 ## Evaluation harness
 
+> **Status: not yet built.** This contract is written ahead of the code, which is
+> Phase 2 work. Until `examples/fsi/eval/` exists, none of the claims below may be
+> made anywhere — including in a README that has been assembled early.
+
 ### May claim
 
 - The offline sweep measures **how the policy behaves** across the fixture
   population as thresholds move.
 - It reports auto-handled fraction, escalation rate and would-have-acted-wrongly
   counts against fixture-assigned labels.
-- The live perturbation harness is implemented and ready to run against a real
+- The live perturbation harness ships as runnable code requiring a real
   `TYPESAFE_API_KEY`.
 
 ### Must not claim
