@@ -1,7 +1,7 @@
 /**
  * Helpers for turning Jev's answers into decisions.
  *
- * The important idea: Jev returns a calibrated judgment, not a verdict. Your
+ * The important idea: Jev returns a distribution, not a verdict. Your
  * code owns the weights, the thresholds and the escalation policy. Everything
  * here is deliberately small and boring so it stays yours to tune — the SDK
  * gives you the measurement, this file is the part you were always going to

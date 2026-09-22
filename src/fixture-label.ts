@@ -71,12 +71,16 @@ export function fixtureTag(live: boolean): string {
 /**
  * The disclosure as Markdown, so an example can emit a README fragment or a PR
  * comment carrying the same wording as its terminal output.
+ *
+ * Ends with a blank line. Without it, CommonMark lazy continuation pulls the
+ * following paragraph *into* the blockquote — so the prose after a disclosure
+ * would render as part of the disclosure.
  */
 export function fixtureMarkdown(live: boolean): string {
   return live
     ? '> **Live TypeSafe API.** Responses are not scripted. Accuracy, calibration\n' +
-        '> and domain suitability remain unvalidated for your data.\n'
+        '> and domain suitability remain unvalidated for your data.\n\n'
     : `> **${SCRIPTED_HEADLINE}**\n>\n` +
         SCRIPTED_BODY.map((line) => `> ${line}`).join('\n') +
-        '\n';
+        '\n\n';
 }
