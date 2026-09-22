@@ -30,6 +30,7 @@
  */
 
 import { choice, noul, score } from '@typesafe-ai/sdk';
+import type { EntryType, TypeSafeClient } from '@typesafe-ai/sdk';
 import { createClient } from '../src/client.ts';
 import type { Proposal, Route } from '../src/proposer.ts';
 import { createProposer } from '../src/proposer.ts';
@@ -67,24 +68,42 @@ title('03 — Jev as the decision plane in a code-owned loop');
 const routePick = createClient(() => ({ model_route: { choice: 'powerful', strength: 0.83 } }));
 banner(routePick.live);
 
-const routing = await routePick.client.systemOne({
-  state: { goal },
-  questions: {
-    model_route: choice('Choose the least costly model that can complete this task safely.', {
-      fast: 'Direct lookups, extraction, and localized changes with explicit targets.',
-      powerful: 'Architecture, novel root-cause reasoning, and high-stakes decisions.',
-    }),
-  },
-});
+/**
+ * Routing is an optimization, not a gate, so it degrades rather than refuses.
+ *
+ * This is the deliberate contrast with `reviewProposal` below. A failed
+ * *optimization* falls back to a safe default and carries on; a failed *gate*
+ * refuses. Collapsing the two — treating every Jev failure the same way — is
+ * how a harness ends up either uselessly brittle or quietly unsafe.
+ */
+const routing = await routePick.client
+  .systemOne({
+    state: { goal },
+    questions: {
+      model_route: choice('Choose the least costly model that can complete this task safely.', {
+        fast: 'Direct lookups, extraction, and localized changes with explicit targets.',
+        powerful: 'Architecture, novel root-cause reasoning, and high-stakes decisions.',
+      }),
+    },
+  })
+  .catch((error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.log(`\n${yellow('ROUTE')} classification unavailable (${reason})`);
+    console.log(`  ${dim('falling back to the capable model — costs more, never under-serves')}`);
+    return null;
+  });
 
-const route = routing.answers.model_route;
+const route = routing?.answers.model_route;
+const routeChoice = (route?.choice ?? 'powerful') as Route;
 // A cheap classification decides where the expensive tokens get spent.
-const proposer = createProposer(route.choice as Route, scriptedProposals);
+const proposer = createProposer(routeChoice, scriptedProposals);
 
-console.log(
-  `\n${bold('Route')}  goal -> ${cyan(route.choice)} ` +
-    dim(`(p=${pct(selectedProbability(route))}, confidence=${pct(route.confidence)})`),
-);
+if (route) {
+  console.log(
+    `\n${bold('Route')}  goal -> ${cyan(route.choice)} ` +
+      dim(`(p=${pct(selectedProbability(route))}, confidence=${pct(route.confidence)})`),
+  );
+}
 console.log(
   `  ${dim(
     `proposer: ${proposer.modelId} via ` +
@@ -139,12 +158,36 @@ const stepScripts = [
 
 /** Fake tool runner. In a real harness this is the only thing that touches the world. */
 function runCommand(command: string): string {
-  if (command.startsWith('ls')) return 'checkout.log  gateway.log  audit.log';
-  if (command.startsWith('grep')) return '17';
+  if (command.startsWith('ls')) return 'checkout.log  gateway.log  audit.log';  if (command.startsWith('grep')) return '17';
   if (command.startsWith('sed')) {
     return 'java.lang.OutOfMemoryError: Java heap space\n  at CheckoutCache.warm(CheckoutCache.java:88)';
   }
   return '(no output)';
+}
+
+/**
+ * The review call, wrapped so that failure is a refusal.
+ *
+ * This is the part that matters. A timeout, a rate limit, a dropped connection
+ * or a malformed response must never be mistaken for approval — the gate has
+ * to fail closed. eve's `auto()` maps a failed review to user-approval for the
+ * same reason. Returning a discriminated union forces the caller to handle it.
+ */
+async function reviewProposal(
+  client: TypeSafeClient,
+  state: EntryType,
+): Promise<
+  | { ok: true; answers: Awaited<ReturnType<typeof client.systemOne<typeof stepQuestions>>>['answers'] }
+  | { ok: false; reason: string }
+> {
+  try {
+    const { answers } = await client.systemOne({ state, questions: stepQuestions });
+    // A response that parsed but is missing the gating answer is also a refusal.
+    if (!answers?.permission?.choice) return { ok: false, reason: 'no permission answer returned' };
+    return { ok: true, answers };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 const history: Array<{ command: string; output: string }> = [];
@@ -162,14 +205,21 @@ for (let step = 0; step < MAX_STEPS; step++) {
   const script = stepScripts[step] ?? {};
   const picked = createClient(() => script);
 
-  const { answers } = await picked.client.systemOne({
-    state: { goal, history, proposed },
-    questions: stepQuestions,
-  });
-
-  const { permission, irreversible, advancesGoal, goalMet, stuck } = answers;
+  const reviewed = await reviewProposal(picked.client, { goal, history, proposed });
 
   console.log(`\n${bold(`step ${step + 1}`)}  ${dim(proposed.command)}`);
+
+  if (!reviewed.ok) {
+    // Fail closed. Nothing runs, and the command joins the blocked list so the
+    // proposer does not simply offer it again.
+    console.log(`  ${red('HOLD')} review unavailable — ${reviewed.reason}`);
+    console.log(`  ${dim('A failed review is a refusal, never an approval.')}`);
+    blockedSteps.push(proposed.command);
+    continue;
+  }
+
+  const { permission, irreversible, advancesGoal, goalMet, stuck } = reviewed.answers;
+
   console.log(
     `  permission=${permission.choice} ` +
       dim(
@@ -233,7 +283,7 @@ title('Outcome');
 console.log(`  ${bold(outcome)}`);
 console.log(
   `  ${history.length} command(s) executed, ${blockedSteps.length} blocked, ` +
-    `model route: ${route.choice}`,
+    `model route: ${routeChoice}`,
 );
 for (const command of blockedSteps) {
   console.log(`  ${red('blocked')} ${dim(command)}`);

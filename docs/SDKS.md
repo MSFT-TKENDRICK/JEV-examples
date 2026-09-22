@@ -44,8 +44,10 @@ What it gives you that is worth not rewriting:
   `APIUserAbortError`, each carrying `status`, `headers`, `body` and
   `requestId`.
 - **A `fetch` option**, which is how this repo runs offline — see
-  [`src/mock-fetch.ts`](../src/mock-fetch.ts). The client, its validation and
-  its error handling are all still on the real path.
+  [`src/mock-fetch.ts`](../src/mock-fetch.ts). The client, its request building
+  and its error handling are all still on the real path. (It does *not*
+  runtime-validate response bodies — `parseBody` is a `JSON.parse` — so a mock
+  is trusted to emit the right shape.)
 - `APIPromise` with `.withResponse()` and `.asResponse()` when you need the
   raw HTTP response or the `x-typesafe-request-id`.
 
@@ -122,8 +124,13 @@ it is a probability, not a verdict, in both SDKs.
 
 ## The Gateway wire protocol, for reference
 
-If you ever need to look at the traffic, or you are implementing this in a
-language with no SDK:
+> ⚠️ **Unpublished, source-derived, and subject to change.** The block below was
+> read from `vercel/ai` on `main`, where the evaluation model is implemented but
+> not released. No request in this repo has ever been sent to it. Do not build
+> another language's client against this until Vercel publishes the evaluation
+> API — the header names and the version number can still move.
+
+If you ever need to look at the traffic:
 
 ```http
 POST https://ai-gateway.vercel.sh/v4/ai/evaluation-model

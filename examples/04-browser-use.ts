@@ -21,7 +21,8 @@
  *
  * Low confidence is not a failure — it is a status. The loop turns a split
  * distribution into `ambiguous` and hands back a ranked shortlist rather than
- * clicking on a coin flip.
+ * clicking on a coin flip. The agent never resolves its own ambiguity: a
+ * person (here, a scripted stand-in) picks from the shortlist, or the run ends.
  *
  * Run:  node examples/04-browser-use.ts
  */
@@ -166,6 +167,21 @@ type Status =
   | 'stuck'
   | 'max_steps';
 
+/**
+ * The human in the loop. A real harness posts the shortlist to a queue, a chat
+ * message or an approval UI and waits. Returning `undefined` — nobody is
+ * available to decide — must end the run, not license a guess.
+ *
+ * This stand-in answers the one escalation this scripted site produces.
+ */
+function askAPerson(shortlist: { option: string; probability: number }[]): string | undefined {
+  const answers: Record<string, string> = {
+    // Both cookie buttons dismiss the banner; a person knows to decline.
+    e1: 'e2',
+  };
+  return shortlist[0] ? answers[shortlist[0].option] : undefined;
+}
+
 title('04 — Browser use: pick an element, never invent one');
 
 let page = pages['/pricing'] as Page;
@@ -225,25 +241,30 @@ for (let step = 0; step < MAX_STEPS; step++) {
   }
 
   // --- Low confidence becomes a status, not a guess. ----------------------
-  if (isAmbiguous(target, 0.6)) {
-    status = 'ambiguous';
-    console.log(`  ${yellow('AMBIGUOUS')} distribution is split; not clicking on a coin flip`);
-    const shortlist = rankedOptions(target)
-      .slice(0, 3)
-      .map((option) => {
-        const element = page.elements.find((candidate) => candidate.id === option.option);
-        return `${option.option} "${element?.label ?? option.option}" ${pct(option.probability)}`;
-      });
-    console.log(`  ${dim('shortlist for the caller or a person:')}`);
-    for (const entry of shortlist) console.log(`    ${entry}`);
+  let chosenId: string = target.choice;
 
-    // A real harness would escalate. Here we take the top candidate and record
-    // that the decision was made under ambiguity.
-    console.log(`  ${dim('escalation policy for this demo: proceed with the top candidate')}`);
-    status = 'running';
+  if (isAmbiguous(target, 0.6)) {
+    console.log(`  ${yellow('AMBIGUOUS')} distribution is split; not clicking on a coin flip`);
+    const ranked = rankedOptions(target).slice(0, 3);
+    console.log(`  ${dim('shortlist handed to the caller:')}`);
+    for (const option of ranked) {
+      const element = page.elements.find((candidate) => candidate.id === option.option);
+      console.log(`    ${option.option} "${element?.label ?? option.option}" ${pct(option.probability)}`);
+    }
+
+    const decision = askAPerson(ranked);
+    if (!decision) {
+      // Nobody available to decide. The run ends here; it does not guess.
+      status = 'ambiguous';
+      console.log(`  ${yellow('HALT')} no human decision available — returning the shortlist`);
+      break;
+    }
+    chosenId = decision;
+    const picked = page.elements.find((candidate) => candidate.id === decision);
+    console.log(`  ${green('HUMAN')} chose ${decision} "${picked?.label ?? decision}"`);
   }
 
-  const element = page.elements.find((candidate) => candidate.id === target.choice);
+  const element = page.elements.find((candidate) => candidate.id === chosenId);
   if (!element) {
     status = 'stuck';
     break;

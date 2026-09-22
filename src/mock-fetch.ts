@@ -154,7 +154,11 @@ function buildScore(question: ScoreQuestion, scripted: ScriptedAnswer | undefine
   // A score is the probability-weighted mean of its level indices, so the
   // distribution has to be solved for rather than guessed at. Hold a background
   // spread fixed, then place the remaining mass on the two levels bracketing the
-  // target so the mean comes out exactly right.
+  // target so the mean comes out right.
+  //
+  // Caveat: the peak mass is capped at 0.999 below and the emitted probabilities
+  // are rounded, so the reported score lands within ~0.002 of the target rather
+  // than exactly on it. Endpoint targets (0 or levels-1) are the worst case.
   const lower = Math.min(Math.floor(target), levels - 2);
   const upper = lower + 1;
 

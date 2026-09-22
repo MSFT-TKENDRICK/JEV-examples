@@ -96,7 +96,18 @@ export function rankedOptions(
  *
  * The SDK returns the rubric as `legend` on the answer, so the level count is
  * already there — no need to thread the question through.
+ *
+ * `legend` is required by the SDK's types, but the SDK does not runtime-validate
+ * responses, so a truncated or absent legend would silently mis-normalize. Pass
+ * `levelCount` explicitly when you already know it and want that guarantee.
  */
-export function normalized(answer: ScoreResponse): number {
-  return normalizeScore(answer.score, Object.keys(answer.legend).length);
+export function normalized(answer: ScoreResponse, levelCount?: number): number {
+  const levels = levelCount ?? Object.keys(answer.legend ?? {}).length;
+  if (levels < 2) {
+    throw new Error(
+      `Cannot normalize: expected a legend with at least 2 levels, got ${levels}. ` +
+        'Pass levelCount explicitly if the response omits its legend.',
+    );
+  }
+  return normalizeScore(answer.score, levels);
 }

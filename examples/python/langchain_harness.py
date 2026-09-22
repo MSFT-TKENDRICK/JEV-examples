@@ -12,8 +12,9 @@ dangerous-action classifier that harnesses like Claude Code and Cursor keep
 closed. That is the clearest statement of what Jev is for in an agent: the
 cheap, fast, structured judgment that gates an expensive, irreversible action.
 
-    pip install "langchain-typesafe[experimental]==0.0.1a3"
+    pip install -r requirements.txt
     export TYPESAFE_API_KEY=...
+    export OPENAI_API_KEY=...
 
 Caveats worth respecting:
   - The package is alpha (0.0.1a3) and the middleware is explicitly
@@ -48,14 +49,14 @@ from typing_extensions import NotRequired
 router = ModelRouterMiddleware(
     choices={
         "fast": ModelChoice(
-            model="openai:gpt-5.6-terra",
+            model="openai:gpt-4o-mini",
             criteria=(
                 "Direct lookups, extraction, and localized changes with "
                 "explicit targets."
             ),
         ),
         "powerful": ModelChoice(
-            model="openai:gpt-6-astra",
+            model="openai:gpt-4o",
             criteria=(
                 "Architecture, novel root-cause reasoning, and high-stakes "
                 "decisions."
@@ -132,11 +133,16 @@ class TriageMiddleware(AgentMiddleware[TriageState]):
 
 
 def main() -> None:
-    if not os.environ.get("TYPESAFE_API_KEY"):
-        raise SystemExit("Set TYPESAFE_API_KEY before running this example.")
+    missing = [
+        name
+        for name in ("TYPESAFE_API_KEY", "OPENAI_API_KEY")
+        if not os.environ.get(name)
+    ]
+    if missing:
+        raise SystemExit(f"Set {' and '.join(missing)} before running this example.")
 
     agent = create_agent(
-        "openai:gpt-5.6-terra",
+        "openai:gpt-4o-mini",
         tools=[read_file, delete_file],
         middleware=[router, auto_mode, TriageMiddleware()],
     )

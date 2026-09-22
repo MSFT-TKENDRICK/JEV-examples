@@ -5,7 +5,7 @@ evaluation model — using the official [`@typesafe-ai/sdk`](https://www.npmjs.c
 paired with the [Vercel AI SDK](https://ai-sdk.dev) and
 [AI Gateway](https://vercel.com/ai-gateway) for the generative half of an agent.
 
-Every example runs right now, with no API key.
+Every example in `examples/*.ts` runs right now, with no API key.
 
 ```bash
 npm install
@@ -195,14 +195,19 @@ step 1  /pricing
   4 candidates · ~80 tokens of page state
   target=e1 p=46.0% · confidence=20.6% · goalMet=1.0%
   AMBIGUOUS distribution is split; not clicking on a coin flip
-  shortlist for the caller or a person:
+  shortlist handed to the caller:
     e1 "Accept all cookies" 46.0%
     e2 "Reject non-essential cookies" 31.4%
+  HUMAN chose e2 "Reject non-essential cookies"
 
 step 3  /pricing/pro
   target=none p=86.0% · confidence=55.5% · goalMet=96.0%
   DONE answer found on this page
 ```
+
+The agent never resolves its own ambiguity. It stops, emits the shortlist, and
+waits; a person picks. If nobody is available to pick, the run ends with status
+`ambiguous` rather than proceeding on a 46% guess.
 
 Why this shape beats "ask an LLM for a selector":
 
@@ -229,8 +234,15 @@ This example simulates a three-page site so it runs without Playwright. The
 ### [`examples/python/`](examples/python) — LangChain
 
 LangChain's TypeSafe integration is **Python-only**; there is no
-`@langchain/typesafe` on npm. These two examples need `TYPESAFE_API_KEY` and do
-not run offline.
+`@langchain/typesafe` on npm.
+
+> **These two files have never been executed.** There was no Python environment
+> and no API key in the build environment, so they are reference implementations
+> read from the published `langchain-typesafe` API, not verified runs. Treat
+> them as a starting point and expect to adjust.
+
+They need `TYPESAFE_API_KEY`, and `langchain_harness.py` additionally needs a
+generative provider (`OPENAI_API_KEY` as written). Neither runs offline.
 
 - [`judge_rubric.py`](examples/python/judge_rubric.py) — the rubric judge from
   example 02, using `TypeSafeClassifier` with `Score`, `Noul` and `Choice`.
@@ -269,8 +281,12 @@ nothing in `src/` reimplements any of them.
 Without a key, the examples inject a mock `fetch` into the real
 `TypeSafeClient` ([`src/mock-fetch.ts`](src/mock-fetch.ts)) and a
 `MockLanguageModelV4` from `ai/test` into the real `generateObject` call. The
-SDKs' request building, validation, retries and error handling all stay on the
-live code path; only the HTTP response bodies are manufactured.
+SDKs' request building, retries and error handling all stay on the live code
+path; only the HTTP response bodies are manufactured.
+
+Note that the SDK does **not** runtime-validate responses — it parses JSON and
+returns it. So the mock's fidelity is guaranteed by its TypeScript types and by
+review, not by the SDK rejecting a wrong shape.
 
 With a key, the exact same code calls the real services:
 
@@ -284,12 +300,25 @@ node examples/01-quickstart.ts
 `TYPESAFE_BASE_URL`, `TYPESAFE_DEFAULT_MODEL` and `TYPESAFE_LOG_LEVEL` — see
 [`.env.example`](.env.example).
 
-**One honest caveat about the mock.** It reproduces Jev's *contract* exactly —
-distributions sum to 1, a Score is the probability-weighted mean of its levels,
-a Choice is the argmax — but it approximates confidence as `1 - normalizedEntropy`.
-That makes two-option questions look under-confident (a 83/17 split reports
-34.2%). Real Jev calibrates confidence differently. Read the mock's confidence
-numbers as illustrative, and do not port that formula.
+**Two honest caveats about the mock.**
+
+It matches the response *declarations* published in `@typesafe-ai/sdk@0.5.7`
+field for field, and it preserves the invariants that matter — distributions
+sum to 1, a Score is the probability-weighted mean of its levels, a Choice is
+the argmax. It has never been checked against a captured live response, so
+"matches the published types" is the strongest claim available, not "matches
+production".
+
+It also approximates confidence as `1 - normalizedEntropy`. That makes
+low-option-count questions look under-confident: a 83/17 split reports 34.2%,
+and the 52/30/12/6 split in example 01 reports 18.9% — which is *why* that
+example routes to triage instead of auto-routing. Real Jev calibrates
+confidence differently, so read that particular outcome as a demonstration of
+the threshold mechanism, not as a prediction of what Jev would decide. Do not
+port the formula.
+
+Score targets are also hit to within ~0.002 rather than exactly, because the
+mock caps its peak mass at 0.999 and rounds the emitted distribution.
 
 ---
 
@@ -305,10 +334,16 @@ examples/         the four TypeScript examples, plus python/
 docs/SDKS.md      which SDK to use, and the naming trap between them
 ```
 
-Everything in `src/` is composition and presentation. There is no hand-written
-API client here: `@typesafe-ai/sdk` already does request building, literal-typed
-answers, retry-with-jitter and typed errors, and the AI SDK already does
-structured generation and Gateway routing.
+Everything in `src/` is either composition (`rubric.ts`), presentation
+(`ui.ts`), wiring (`client.ts`, `proposer.ts`) or an offline service simulator
+(`mock-fetch.ts`). There is no hand-written API client:
+`@typesafe-ai/sdk` already does request building, literal-typed answers,
+retry-with-jitter and typed errors, and the AI SDK already does structured
+generation and Gateway routing.
+
+`mock-fetch.ts` is the one piece of genuinely hand-written protocol code, and
+it exists only because no published package simulates Jev's `/v1/systemone`
+responses. It is test infrastructure, not part of the live path.
 
 ### About `experimental_evaluate`
 
