@@ -328,6 +328,11 @@ export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
  * Sweeps the mass threshold across its useful range, holding the other two at
  * the values the examples actually ship. Varying one knob at a time is the only
  * way the resulting column is attributable to anything.
+ *
+ * The probe-side thresholds an example may carry — a probe budget, a minimum
+ * gain worth buying — are not represented here at all. So the output is the
+ * sensitivity of one gate, and must not be described as the sensitivity of the
+ * policy.
  */
 export function defaultGates(): Gate[] {
   const gates: Gate[] = [];

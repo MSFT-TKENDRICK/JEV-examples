@@ -293,5 +293,12 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
 - That a `rankingViolations` count of zero is evidence the selector is good. The
   shipped ranking is gain-per-cost, so under it that count is zero by
   construction; it is a consistency check on the recorded trail, nothing more.
+- That the table shows how sensitive **the policy** is to its thresholds. It
+  sweeps one knob, `minSelectedProbability`, holds `minMargin` and
+  `maxNormalizedEntropy` at their shipped values, and does not vary the
+  probe-side thresholds — the probe budget, and the gain floors a probe must
+  clear — at all. It is the sensitivity of one gate. Describing it as the
+  policy's sensitivity would imply the probe budget had been varied and found
+  not to matter, which no run here tested.
 - The perturbation results are known. **The live path has never been executed.**
   The repo ships the instrument, not the findings.
