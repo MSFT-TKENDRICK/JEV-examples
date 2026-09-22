@@ -5,12 +5,26 @@ evaluation model — using the official [`@typesafe-ai/sdk`](https://www.npmjs.c
 paired with the [Vercel AI SDK](https://ai-sdk.dev) and
 [AI Gateway](https://vercel.com/ai-gateway) for the generative half of an agent.
 
-Every example in `examples/*.ts` runs right now, with no API key.
+Examples 01–04 run right now, with no API key and no setup beyond `npm install`.
+Examples 05 and 06 drive a real Chrome and record it; they need a one-time
+browser download, so they are opt-in.
 
 ```bash
 npm install
 node examples/01-quickstart.ts
 ```
+
+### Jev vs a conventional generative agent
+
+![Jev and a control model browsing the same site side by side](docs/media/jev-vs-control.gif)
+
+Same task, same page, same driver, same click mechanics — only the decision
+model differs. Left is Jev; right is an ordinary `generateObject` agent. Jev has
+already decided and escalated the ambiguous cookie banner to a human while the
+control is still generating. Produced by
+[`06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) with `npm run compare`;
+read [what is and is not measured](#06-jev-vs-controlts--jev-against-a-control-model)
+before drawing conclusions from the clock.
 
 ---
 
@@ -231,6 +245,68 @@ TypeSafe browser example: [`Ying-Kai-Liao/jev-browser`](https://github.com/Ying-
 This example simulates a three-page site so it runs without Playwright. The
 `describe → evaluate → act` contract is what you would keep.
 
+### [`05-browser-live.ts`](examples/05-browser-live.ts) — the same loop, against real Chrome
+
+Example 04's argument, with the simulation removed. Chrome launches, the
+elements come from the real DOM over CDP, the cursor moves to real coordinates
+and the clicks are real input events. The decision policy is imported from
+[`src/browser-policy.ts`](src/browser-policy.ts) and shared verbatim with
+example 04; everything that is not the decision lives in
+[`src/browser-driver.ts`](src/browser-driver.ts). Only the arm differs.
+
+```bash
+npm run record                 # writes docs/media/browser-use.mp4
+npm run record -- --no-video   # drive the browser, skip encoding
+```
+
+It records itself with [`webreel`](https://www.npmjs.com/package/webreel), which
+owns the cursor animation, the click overlay and the ffmpeg pipeline.
+
+**Not zero-setup.** webreel downloads Chrome and ffmpeg into `~/.webreel` on
+first run — a few hundred MB — which is why 05 and 06 are excluded from
+`npm run all`.
+
+### [`06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) — Jev against a control model
+
+The same task run twice through the same driver, recorded, and stitched
+side by side.
+
+| | Jev | Control |
+|---|---|---|
+| call | one `systemOne` | one `generateObject` |
+| returns | a distribution over the elements, plus four scalars | one element id and a self-reported confidence |
+| harness can gate on | the shape of the distribution | nothing trustworthy |
+| the cookie banner | flat distribution → stops and asks | one answer → clicks it |
+
+```bash
+npm run compare                # writes docs/media/jev-vs-control.{mp4,gif}
+npm run compare -- --no-video
+```
+
+The control is not a straw man. It gets the same page description and a strict
+schema, which is how you are supposed to make a language model drive a UI. The
+difference is structural: self-reported confidence is a token the model chose,
+drawn from the same distribution as the rest of its output, and it is not a
+measurement of anything. A harness handed one answer has nothing to check, so it
+acts on every answer — which is what most agents in production actually do.
+
+#### What the clock does and does not show
+
+Read this before quoting the numbers.
+
+- With **no keys** (the default), both arms replay scripted answers. Jev's
+  decision time is ~0 because nothing leaves the process, and the control's is
+  `CONTROL_THINK_MS` — a declared 2600 ms stand-in for a generation, not a
+  measurement. The caption burned into each video says which mode it ran in.
+- With **`TYPESAFE_API_KEY` and `AI_GATEWAY_API_KEY`** set, both arms make real
+  calls and every number in the summary becomes a real measurement.
+- The clicks, the DOM, the element enumeration and the escalation logic are real
+  in both modes. **The recording is evidence that the loops behave as described.
+  It is not a benchmark.**
+
+The behavioural difference does not depend on the stand-in at all: it follows
+from one arm returning a distribution and the other returning a single answer.
+
 ### [`examples/python/`](examples/python) — LangChain
 
 LangChain's TypeSafe integration is **Python-only**; there is no
@@ -268,13 +344,29 @@ you want a person in the path.
 ```bash
 npm install
 node examples/01-quickstart.ts   # or: npm run quickstart
-npm run all                      # all four, in order
+npm run all                      # examples 01–04, in order
+
+npm run record                   # 05: real Chrome, recorded
+npm run compare                  # 06: Jev vs a control model, side by side
 ```
 
 There is no build step. The examples are `.ts` files executed directly by
 **Node ≥ 22.18**, which strips types natively. The dependencies are the real
 published SDKs — `@typesafe-ai/sdk`, `ai`, `@ai-sdk/gateway` and `zod` — and
 nothing in `src/` reimplements any of them.
+
+`npm run all` deliberately stops at 04 so the repo keeps its clone-and-run
+property. 05 and 06 add `webreel`, which downloads Chrome and ffmpeg into
+`~/.webreel` on first use.
+
+> **Known upstream issue.** webreel 0.1.4 requests an ffmpeg build
+> (`ffmpeg-n7.1-…`) that its upstream no longer publishes, so the download 404s
+> on a clean machine. Set `FFMPEG_PATH` to your own ffmpeg to work around it;
+> the browser loop runs either way and only the video is lost. Separately, its
+> headless launch flags (`--enable-begin-frame-control`) stall
+> `Page.captureScreenshot` forever, so its own recorder captures zero frames —
+> [`src/chrome-launch.ts`](src/chrome-launch.ts) starts the same binary without
+> those two flags and explains why.
 
 ### Offline by default, live with one env var
 
@@ -325,21 +417,29 @@ mock caps its peak mass at 0.999 and rounds the emitted distribution.
 ## Repo layout
 
 ```
-src/client.ts     createClient() — real TypeSafeClient, mock fetch when offline
-src/mock-fetch.ts offline Fetch answering POST /v1/systemone
-src/proposer.ts   the AI SDK half: generateObject + gateway, MockLanguageModelV4 offline
-src/rubric.ts     normalizeScore, weightedScore, gate, isAmbiguous, rankedOptions
-src/ui.ts         console formatting
-examples/         the four TypeScript examples, plus python/
-docs/SDKS.md      which SDK to use, and the naming trap between them
+src/client.ts         createClient() — real TypeSafeClient, mock fetch when offline
+src/mock-fetch.ts     offline Fetch answering POST /v1/systemone
+src/proposer.ts       the AI SDK half: generateObject + gateway, MockLanguageModelV4 offline
+src/control-agent.ts  the control arm for example 06: generateObject browsing policy
+src/rubric.ts         normalizeScore, weightedScore, gate, isAmbiguous, rankedOptions
+src/browser-policy.ts the questions and the decision cascade, shared by 04/05/06
+src/browser-driver.ts launch, record, describe, click — everything that is not the decision
+src/chrome-launch.ts  Chrome that webreel's recorder can actually capture (see the note above)
+src/compose.ts        side-by-side stacking and GIF export, on webreel's ffmpeg
+src/ui.ts             console formatting
+examples/             the six TypeScript examples, plus site/ and python/
+docs/media/           recordings produced by examples 05 and 06
+docs/SDKS.md          which SDK to use, and the naming trap between them
 ```
 
-Everything in `src/` is either composition (`rubric.ts`), presentation
-(`ui.ts`), wiring (`client.ts`, `proposer.ts`) or an offline service simulator
-(`mock-fetch.ts`). There is no hand-written API client:
-`@typesafe-ai/sdk` already does request building, literal-typed answers,
-retry-with-jitter and typed errors, and the AI SDK already does structured
-generation and Gateway routing.
+Everything in `src/` is either composition (`rubric.ts`, `browser-policy.ts`),
+presentation (`ui.ts`), wiring (`client.ts`, `proposer.ts`, `control-agent.ts`),
+plumbing over published packages (`browser-driver.ts`, `chrome-launch.ts`,
+`compose.ts`) or an offline service simulator (`mock-fetch.ts`). There is no
+hand-written API client: `@typesafe-ai/sdk` already does request building,
+literal-typed answers, retry-with-jitter and typed errors, the AI SDK already
+does structured generation and Gateway routing, and `webreel` already does CDP
+recording, cursor overlays and encoding.
 
 `mock-fetch.ts` is the one piece of genuinely hand-written protocol code, and
 it exists only because no published package simulates Jev's `/v1/systemone`

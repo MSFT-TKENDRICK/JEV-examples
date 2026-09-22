@@ -5,3 +5,7 @@ node_modules/
 .DS_Store
 __pycache__/
 .venv/
+
+# Per-arm recordings from example 06; only the stitched result is committed.
+docs/media/compare-*.mp4
+.impeccable/

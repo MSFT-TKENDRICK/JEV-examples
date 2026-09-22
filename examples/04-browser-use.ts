@@ -27,26 +27,19 @@
  * Run:  node examples/04-browser-use.ts
  */
 
-import { choice, noul } from '@typesafe-ai/sdk';
 import { createClient } from '../src/client.ts';
+import type { PageElement, Status } from '../src/browser-policy.ts';
+import { buildQuestions, decide } from '../src/browser-policy.ts';
 import type { ScriptedAnswer } from '../src/mock-fetch.ts';
-import { isAmbiguous, rankedOptions, selectedProbability } from '../src/rubric.ts';
+import { selectedProbability } from '../src/rubric.ts';
 import { banner, bold, cyan, dim, green, pct, red, title, yellow } from '../src/ui.ts';
 
 const task = 'Find the monthly price of the Pro plan.';
 
-interface Element {
-  id: string;
-  role: 'button' | 'link' | 'tab' | 'input';
-  label: string;
-  /** Marks actions that cannot be undone. Code, not the model, decides policy. */
-  destructive?: boolean;
-}
-
 interface Page {
   url: string;
   text: string;
-  elements: Element[];
+  elements: PageElement[];
 }
 
 /** A simulated site, so the example runs with no browser installed. */
@@ -107,32 +100,6 @@ function describe(page: Page, history: string[]) {
   };
 }
 
-/** Step 3's questions. Built per page because the option set is the page. */
-function buildQuestions(page: Page) {
-  const candidates: Record<string, string> = Object.fromEntries(
-    page.elements.map((element) => [element.id, `${element.role} labelled "${element.label}"`]),
-  );
-
-  return {
-    // The model selects from real elements. It cannot invent a selector.
-    target: choice(
-      'Which single element in `candidates` should be actioned next to make progress on `task`?',
-      { ...candidates, none: 'No element on this page helps with the task' },
-    ),
-    verb: choice('What interaction does the chosen element require?', {
-      click: 'Press a button, link or tab',
-      type: 'Enter text into an input',
-      select: 'Choose a value from a list',
-    }),
-    goalMet: noul('Does `visibleText` already contain the answer to `task`?', {
-      true: 'The specific value asked for is present in the visible text',
-      false: 'The value is not shown yet',
-    }),
-    blocked: noul('Is the page showing a login wall, paywall, captcha or hard error?'),
-    looping: noul('Do `stepsTaken` show the same action being repeated without effect?'),
-  };
-}
-
 /** Scripted judgments per step, keyed by URL. */
 const scripts: Record<string, Record<string, ScriptedAnswer>> = {
   '/pricing': {
@@ -157,15 +124,6 @@ const scripts: Record<string, Record<string, ScriptedAnswer>> = {
     looping: { noul: 0.02 },
   },
 };
-
-type Status =
-  | 'running'
-  | 'done'
-  | 'ambiguous'
-  | 'needs_confirmation'
-  | 'blocked'
-  | 'stuck'
-  | 'max_steps';
 
 /**
  * The human in the loop. A real harness posts the shortlist to a queue, a chat
@@ -192,7 +150,7 @@ let live = false;
 const MAX_STEPS = 6;
 
 for (let step = 0; step < MAX_STEPS; step++) {
-  const questions = buildQuestions(page);
+  const questions = buildQuestions(page.elements);
   const script = scripts[page.url] ?? {};
   const picked = createClient(() => script);
   live = picked.live;
@@ -201,8 +159,7 @@ for (let step = 0; step < MAX_STEPS; step++) {
   const state = describe(page, history);
   const { answers } = await picked.client.systemOne({ state, questions });
 
-  const { target, verb, goalMet, blocked, looping } = answers;
-  const targetProbability = selectedProbability(target);
+  const { target, verb, goalMet } = answers;
 
   console.log(`\n${bold(`step ${step + 1}`)}  ${cyan(page.url)}`);
   console.log(
@@ -212,56 +169,45 @@ for (let step = 0; step < MAX_STEPS; step++) {
   );
   console.log(
     `  target=${target.choice} ${dim(
-      `p=${pct(targetProbability)} · confidence=${pct(target.confidence)} · ` +
+      `p=${pct(selectedProbability(target))} · confidence=${pct(target.confidence)} · ` +
         `goalMet=${pct(goalMet.noul)}`,
     )}`,
   );
 
-  // --- Terminal conditions, checked by code, highest severity first. -------
-  if (blocked.noul >= 0.7) {
-    status = 'blocked';
-    console.log(`  ${red('BLOCKED')} login wall or hard error`);
-    break;
-  }
-  if (goalMet.noul >= 0.85) {
-    status = 'done';
-    answer = page.text;
-    console.log(`  ${green('DONE')} answer found on this page`);
-    break;
-  }
-  if (looping.noul >= 0.7) {
-    status = 'stuck';
-    console.log(`  ${yellow('STUCK')} repeating without effect`);
-    break;
-  }
-  if (target.choice === 'none') {
-    status = 'stuck';
-    console.log(`  ${yellow('STUCK')} no element on this page advances the task`);
+  // --- The decision. Shared verbatim with example 05's real-browser loop. --
+  const decision = decide(answers);
+  let chosenId: string;
+
+  if (decision.kind === 'terminal') {
+    status = decision.status;
+    if (status === 'done') answer = page.text;
+    const paint = status === 'done' ? green : status === 'blocked' ? red : yellow;
+    console.log(`  ${paint(status.toUpperCase())} ${decision.reason}`);
     break;
   }
 
-  // --- Low confidence becomes a status, not a guess. ----------------------
-  let chosenId: string = target.choice;
-
-  if (isAmbiguous(target, 0.6)) {
+  if (decision.kind === 'escalate') {
     console.log(`  ${yellow('AMBIGUOUS')} distribution is split; not clicking on a coin flip`);
-    const ranked = rankedOptions(target).slice(0, 3);
     console.log(`  ${dim('shortlist handed to the caller:')}`);
-    for (const option of ranked) {
+    for (const option of decision.shortlist) {
       const element = page.elements.find((candidate) => candidate.id === option.option);
-      console.log(`    ${option.option} "${element?.label ?? option.option}" ${pct(option.probability)}`);
+      console.log(
+        `    ${option.option} "${element?.label ?? option.option}" ${pct(option.probability)}`,
+      );
     }
 
-    const decision = askAPerson(ranked);
-    if (!decision) {
+    const resolved = askAPerson(decision.shortlist);
+    if (!resolved) {
       // Nobody available to decide. The run ends here; it does not guess.
       status = 'ambiguous';
       console.log(`  ${yellow('HALT')} no human decision available — returning the shortlist`);
       break;
     }
-    chosenId = decision;
-    const picked = page.elements.find((candidate) => candidate.id === decision);
-    console.log(`  ${green('HUMAN')} chose ${decision} "${picked?.label ?? decision}"`);
+    chosenId = resolved;
+    const chosen = page.elements.find((candidate) => candidate.id === resolved);
+    console.log(`  ${green('HUMAN')} chose ${resolved} "${chosen?.label ?? resolved}"`);
+  } else {
+    chosenId = decision.elementId;
   }
 
   const element = page.elements.find((candidate) => candidate.id === chosenId);
