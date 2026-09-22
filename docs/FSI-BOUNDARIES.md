@@ -48,9 +48,20 @@ It becomes a *safety property* only once you can show, on your own data, that:
 - option-set composition does not destabilize the probabilities;
 - the chosen threshold produces an acceptable risk/coverage tradeoff.
 
-None of that is demonstrated here, and none of it is measured here. The planned
-`examples/fsi/eval/` harness will ship the *instrument* for measuring it; it will
-not ship results. That harness is not yet in this repository.
+None of that is demonstrated here, and none of it is measured here.
+`examples/fsi/eval/` ships the *instrument*, not the results: the offline sweep
+runs over manufactured distributions and so can only characterize the policy,
+and `perturb.ts` — the only part that could speak to option-set stability —
+requires a real key and has never been executed.
+
+One negative result does fall out of the offline sweep, and it is worth stating
+because it cuts against the pattern rather than for it: the two fixtures where
+deterministic code vetoed an accepted recommendation are not removed by any
+threshold that leaves the automation switched on. Confidence thresholds did not
+catch a confident answer to a question asked against stale state, because there
+was nothing uncertain about it. That is a property of the fixtures, not a
+measurement — but it is the failure mode the table below describes, made
+concrete.
 
 ### Known failure modes
 

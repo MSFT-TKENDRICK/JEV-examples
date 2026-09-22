@@ -94,7 +94,7 @@ const ledger = createLedger({
   component: 'fsi-07-next-step',
   mode: runMode(live),
   service: { model: 'jev-latest', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
-  ...(process.env['FSI_LEDGER_FILE'] ? { file: process.env['FSI_LEDGER_FILE'] } : {}),
+  ...(process.env['JEV_LEDGER_FILE'] ? { file: process.env['JEV_LEDGER_FILE'] } : {}),
 });
 
 /** Turns a scripted answer into a mock transport for one `systemOne` call. */
@@ -443,7 +443,7 @@ console.log(
 title('Ledger');
 for (const entry of ledger.entries()) console.log(`  ${summarize(entry)}`);
 console.log(
-  `\n  ${dim(`${ledger.entries().length} records, mode ${runMode(live)}. Set FSI_LEDGER_FILE to write JSONL.`)}\n` +
+  `\n  ${dim(`${ledger.entries().length} records, mode ${runMode(live)}. Set JEV_LEDGER_FILE to write JSONL.`)}\n` +
     `  ${dim('Evidence capture that may support governance. Not an audit trail: not')}\n` +
     `  ${dim('tamper-evident, not immutable, not independently verified, and a hashed')}\n` +
     `  ${dim('state reference is not anonymization.')}`,

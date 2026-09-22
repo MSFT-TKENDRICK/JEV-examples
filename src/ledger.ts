@@ -218,6 +218,8 @@ export function hashState(state: unknown): string {
  *   necessarily every option the service returned. A truncated or malformed
  *   response returns fewer, and a threshold justified for one option-set size is
  *   not portable to another — so the count must come from what you offered.
+ *   Required: when this was optional, omitting it silently changed the entropy
+ *   denominator, which is the kind of mistake that reads as correct.
  *
  * Degenerate inputs are treated as maximally *uninformative*, never as
  * confident. A one-option set and an empty distribution would otherwise both
@@ -228,10 +230,10 @@ export function hashState(state: unknown): string {
 export function metricsFor(
   probabilities: Readonly<Record<string, number>>,
   selected: string,
-  offeredOptionIds?: readonly string[],
+  offeredOptionIds: readonly string[],
 ): DistributionMetrics {
   const returned = Object.keys(probabilities);
-  const optionCount = offeredOptionIds?.length ?? returned.length;
+  const optionCount = offeredOptionIds.length;
 
   if (returned.length > 0 && !(selected in probabilities)) {
     throw new Error(

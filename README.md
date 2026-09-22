@@ -339,12 +339,456 @@ you want a person in the path.
 
 ---
 
+## FSI examples
+
+Four of the examples above are about Jev's mechanics. These two are about a
+domain: what a bounded-choice model is worth inside a regulated financial
+services workflow, where the cost of a confident wrong answer is not a bad
+paragraph but a wrongly frozen card or a wrongly touched production system.
+
+Both are written to a stricter standard than examples 01–06, recorded in
+[`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md) and
+[`docs/FSI-BOUNDARIES.md`](docs/FSI-BOUNDARIES.md): every decision is written to
+a JSONL ledger, every run is labelled as scripted, and no example is permitted
+to claim a distribution deserves trust — only to show what the surrounding
+application does with one.
+
+```bash
+npm run fsi:07
+npm run fsi:08
+npm run fsi:eval
+```
+
+### 07 — Bounded next-step recommendation
+
+[`examples/fsi/07-next-step/index.ts`](../../examples/fsi/07-next-step/index.ts) —
+a card-fraud servicing workflow in which deterministic code reads the authoritative
+records, decides which next steps are even eligible, and only then asks Jev which
+eligible step to try first.
+
+```bash
+npm run fsi:07
+```
+
+**This is a scripted offline fixture.** No live TypeSafe API call is made. The
+model's selection and its distribution are predetermined by
+[`scenarios.ts`](../../examples/fsi/07-next-step/scenarios.ts) so that each route
+through the policy can be shown deterministically. The run demonstrates
+application control flow, not model accuracy. No customer or transaction data is
+used, no domain validation has been performed, and the thresholds are illustrative
+rather than empirically selected.
+
+#### What it may be read as showing
+
+Bounded options are constructed by code before the model is consulted; an
+abstention policy is applied to the returned distribution; execution arguments are
+bound to authoritative record identifiers or exact customer text spans; a
+consequential action requires named human approval, tied to an immutable proposal
+digest and revalidated against a fresh read of the records; and recommendation is
+recorded separately from execution so divergence between them is visible.
+
+**What it must not be read as showing:** that Jev understands fraud reports, that
+it is calibrated for banking workflow selection, that it prevents hallucination or
+provides authorization, that a bounded option set implies a correct choice, that
+this pattern safely automates freezes or disputes, that it reduces fraud loss,
+handling time or clarification turns, or that human confirmation alone satisfies
+any regulatory requirement. The binding list is
+[`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md); anything not on it does not
+ship.
+
+#### The ordering is the point
+
+1. Read the records.
+2. Compute eligibility deterministically — entitlement first, then preconditions.
+3. Offer only the eligible steps to Jev, plus `none_of_these`.
+4. Apply an explicit abstention policy to the distribution.
+5. Bind every execution argument to a record identifier or an exact source span.
+6. Take approval against a frozen proposal digest, then revalidate against a fresh
+   read before executing.
+
+Ineligible steps are absent from the option set, not merely unlikely within it.
+In the `already-frozen` scenario the card is frozen out of band before the model
+is consulted, so `freeze_card` is not offered at all:
+
+```
+already-frozen — The card was frozen in the app two minutes ago
+───────────────────────────────────────────────────────────────
+  option set built by code from card-system-of-record@v2 read 2026-03-11T09:14:00.000Z
+  offered  order_replacement_card, open_dispute, schedule_callback, send_transaction_receipt, record_customer_note
+  withheld freeze_card — card is already frozen
+  withheld close_case — principal customer is not entitled to close_case
+```
+
+#### Abstention
+
+The policy runs three tests on the distribution — selected probability, margin
+over the runner-up, and normalized entropy. A failed call is a refusal before any
+of them, never an approval. A flat distribution is escalated rather than acted on:
+
+```
+  jev recommends send_transaction_receipt
+    send_transaction_receipt  ██████████··············  42.0%
+    schedule_callback         █████···················  19.3%
+    record_customer_note      █████···················  19.3%
+    open_dispute              ██······················   7.7%
+    none_of_these             ██······················   7.7%
+    freeze_card               █·······················   3.9%
+    p=42.0% · margin=0.23 · entropy=0.85 · over 6 offered options
+    selected probability 0.42 < 0.70; margin 0.23 < 0.25; entropy 0.85 > 0.60
+  ESCALATE distribution too ambiguous to act on: selected probability 0.42 < 0.70; margin 0.23 < 0.25; entropy 0.85 > 0.60
+  nothing executed; case routed to route_to_servicing_queue
+```
+
+#### Argument binding
+
+Arguments are never taken as text. A record reference must exist in the snapshot
+*and* be in the step's candidate set; a derived field must equal the authoritative
+field on that record; a narrative must be an exact substring of a permitted source
+document, because a near-quotation is a rewrite.
+
+The `unbound-arguments` scenario runs a generative control arm through the same
+`bindArguments()` the Jev arm uses:
+
+```
+  control arm MockLanguageModelV4 (ai/test) — scripted adversarial fixture · schema-valid, records unchecked
+  REJECTED generative proposal — by bindArguments, before execution
+    ✗ transactionId=TXN-88231
+      no transaction with this identifier in card-system-of-record@v1
+    ✗ merchantId=MERCH-ZEPHYR-INTL
+      no merchant with this identifier in card-system-of-record@v1
+    ✗ amountMinor=26499
+      cannot be checked on its own: an amount is authoritative only relative to a
+      transaction, and the referenced transaction did not resolve in card-system-of-record@v1
+    ✗ narrative=Customer reports an unauthorised payment of around £265 to Zephyr.
+      not an exact quotation from a permitted source document
+```
+
+**This is an adversarial fixture, not a fair benchmark.** The control arm was
+scripted to propose unbound arguments. A competent generative implementation can
+be constrained to enumerated record identifiers and would pass exactly the same
+checks, for exactly the same reason — the checks are in the application, not in
+the model. The claim is narrow: *execution arguments that are not bound to
+authoritative records are rejected, regardless of which model proposed them.*
+
+#### Where the safety properties live
+
+Every one of them is owned by deterministic code. This is from the run, not a
+summary of it:
+
+```
+ineligible action cannot be selected   computeEligibility()   deterministic
+principal cannot exceed entitlement    permits()              deterministic
+argument must resolve to a record      bindArguments()        deterministic
+narrative must be the customer's words resolveSpan()          deterministic
+consequential action needs approval    STEPS[].consequential  deterministic
+approval binds to one frozen proposal  digestOf()             deterministic
+state cannot go stale under approval   revalidate()           deterministic
+which eligible step to try first       Jev                    unmeasured
+when the case is too unclear to act    Jev + policy           unmeasured
+```
+
+#### The baseline arm
+
+Every scenario is also run with Jev removed and static priority in its place, so
+the contribution is visible rather than assumed:
+
+```
+  scenario                   jev recommended           route              harness executed          baseline
+  clear-unauthorized-charge  freeze_card               approval_required  freeze_card               freeze_card
+  ambiguous-report           send_transaction_receipt  escalated          route_to_servicing_queue  freeze_card
+  already-frozen             open_dispute              approval_required  open_dispute              open_dispute
+  unbound-arguments          open_dispute              approval_required  open_dispute              freeze_card
+  stale-state                open_dispute              approval_required  route_to_servicing_queue  freeze_card
+  service-unavailable        (none)                    refused            route_to_servicing_queue  freeze_card
+```
+
+The baseline refuses everything this run refused — it goes through the same
+eligibility, binding, approval and revalidation code. What it cannot do is
+abstain: static priority always has an answer, which is why it would have frozen a
+card on the ambiguous report. Jev's contribution here is prioritization and
+preselection, and **that benefit is unmeasured by this repository.** Whether it is
+worth anything in a real servicing workflow is one of the open questions in
+[`docs/FSI-BOUNDARIES.md`](../FSI-BOUNDARIES.md).
+
+#### Divergence
+
+Recommendation and execution are recorded separately and the difference is
+derived, not asserted:
+
+```
+  approval_required  recommended=freeze_card                  executed=freeze_card
+  escalated          recommended=send_transaction_receipt     executed=route_to_servicing_queue  ⚠ diverged
+  approval_required  recommended=open_dispute                 executed=open_dispute
+  refused            recommended=(none)                       executed=route_to_servicing_queue  ⚠ diverged
+  approval_required  recommended=open_dispute                 executed=open_dispute
+  approval_required  recommended=open_dispute                 executed=route_to_servicing_queue  ⚠ diverged
+  refused            recommended=(none)                       executed=route_to_servicing_queue
+```
+
+The ledger is evidence capture that may support governance. It is not an audit
+trail: not tamper-evident, not immutable, not independently verified, and a hashed
+state reference is not anonymization.
+
+---
+
+### 08 — Residual incident runbook routing
+
+[`examples/fsi/08-runbook-routing/index.ts`](../../examples/fsi/08-runbook-routing/index.ts)
+— an overnight mainframe batch window produces thirteen incidents; deterministic
+sources answer most of them, and only the semantic residual is put to Jev as a
+bounded choice over applicable diagnostic runbooks plus `none-of-these`.
+
+```
+npm run fsi:08
+```
+
+**Everything in this example is a scripted offline fixture.** The incidents, the
+spool text, the CMDB, the runbook catalog and — importantly — the model's answers
+and probability distributions are all manufactured. Nothing calls the TypeSafe
+API unless `TYPESAFE_API_KEY` is set and `JEV_MOCK` is not `1`, and the fault
+fixtures stay offline even then. The distributions were chosen to exercise
+application paths, not to represent how Jev would actually respond. The run
+demonstrates control flow, not model accuracy.
+
+#### The shape of the problem
+
+A batch shop does not have a routing problem for most of its incidents. It has a
+lookup problem, and the lookups already exist:
+
+| Source | Answers |
+|---|---|
+| incident system | is this a repeat alert on an already-open incident? |
+| scheduler dependency graph | is this job held behind a failed predecessor? |
+| scheduler restart policy | is the scheduler already retrying a restartable abend? |
+| reconciliation control | did a control total break, triggering a prescribed response? |
+| abend mapping table | is this abend code mapped to a procedure? |
+
+In this run those five sources resolve **7 of 13** incidents with no request
+built at all — the spool text never leaves the process for those incidents. What
+is left is not "harder tickets"; it is structurally different work: an unmapped
+vendor message, several symptom families in one window with nothing authoritative
+to choose between them, a case where the message text and the dependency state
+point at different subsystems, and a condition the catalog does not cover.
+
+Those six reach Jev. Each gets a bounded diagnostic window — anchored on the first
+error marker, not a log tail — with the configured patterns deterministically
+redacted before the request is built, and a candidate set derived from the
+incident's affected configuration items plus `none-of-these`. Ownership metadata,
+paging rota and release-train correlation are withheld: ownership is a lookup the
+model must never be shown, and pairing a recent deployment with a failure invites
+a causal reading the evidence does not support.
+
+Application code then turns the returned distribution into a route. The default
+route is the ordinary operations queue — where these incidents went before any of
+this existed — so the safe path does not depend on the answer being correct, or
+on there being an answer at all.
+
+#### Real output
+
+Abridged from a real `npm run fsi:08` run; the `…` markers replace repeated
+sections of the same shape.
+
+```
+08 — Residual incident runbook routing
+────────────────────────────────────────
+13 incidents from one overnight window. Deterministic sources run first;
+only what they cannot settle is put to Jev, as a bounded choice over applicable procedures.
+
+INC-4471  CBPOST40/STEP030  flow=NIGHTLY-CORE · CIs=CBPOST, DB2P01 · scheduler=ABENDED · abend=S0C7 · SLA 05:30Z
+  DETERMINISTIC RUNBOOK  open RB-DATA-0C7 — S0C7 is mapped
+  source: abend-mapping-table@2026-08-30.1 · no request built · spool never left the process
+
+INC-4472  CBSTMT10  flow=NIGHTLY-CORE · CIs=CBSTMT · scheduler=WAITING_PREDECESSOR · SLA 06:00Z
+  LINKED TO PREDECESSOR  link to INC-4471 — held behind CBPOST40 (ABENDED); the predecessor carries the investigation
+  source: scheduler-dependency-graph@live · no request built · spool never left the process
+
+…
+
+INC-4478  CDCLR20  flow=NIGHTLY-CARDS · CIs=CDCLR, MQ-CDCLR-CHL · scheduler=ENDED_NOT_OK · SLA 05:00Z
+  residual (unmapped_vendor_message): vendor message identifier is not present in the mapping table
+  window: lines 1–6 of 6 · redaction: hostname×1
+    03:21:30 JOB13004  +CDC0500I OPENING SCHEME SESSION, WINDOW 03 OF 04
+    03:21:33 JOB13004  PLX0421E CUTOVER WINDOW ARBITRATION FAILED - PEER TOKEN STALE (SEQ 0)
+    03:21:33 JOB13004  PLX0422I LOCAL WINDOW STATE=ACTIVE PEER WINDOW STATE=DRAINING
+    … 3 more line(s)
+  candidates: 5 applicable procedure(s) + none-of-these · withheld: rawSpool, accountAndCardIdentifiers, redactionMapping, cmdbOwner, pagingRota, releaseTrain, customerRecords
+  distribution: RB-CARD-SCHEME-CUTOVER 86.0% · RB-LOADLIB 4.7% · RB-MQ-CHANNEL 4.7% · margin 0.81 · entropy 0.34 · sufficiency 81%
+  RUNBOOK SUGGESTED  RB-CARD-SCHEME-CUTOVER suggested as the first diagnostic step for the assigned engineer
+
+INC-4479  CBPOST45  flow=NIGHTLY-CORE · CIs=CBPOST, DB2P01, FXFEED · scheduler=ENDED_NOT_OK · SLA 05:30Z
+  residual (multiple_symptoms_no_mapping): 3 symptom families in one window (db2, mq, dataset), none mapped
+  …
+  distribution: RB-FEED-LATE 37.0% · RB-DB2-CONTENTION 20.2% · RB-CTL-BREAK 20.2% · margin 0.17 · entropy 0.84 · sufficiency 44%
+  OPS QUEUE  distribution did not meet the policy for an unattended suggestion
+    ✗ selected probability 0.37 < 0.7
+    ✗ margin 0.17 < 0.25
+    ✗ normalized entropy 0.84 > 0.6
+    ✗ evidence sufficiency 0.44 < 0.6
+  ownership: DB2P01: CMDB record flagged stale; ownership unconfirmed
+  ownership: FXFEED: CMDB ownership contested between market-data and treasury-ops; bridge confirms before handoff
+  release REL-2026.09.3 touched CBPOST, GLEXTR at 2026-09-21T19:40Z — recorded as correlation, withheld from the request, not treated as cause
+  recommendation RB-FEED-LATE recorded but not acted on — ledger marks the divergence
+
+INC-4480  CDCLR30  flow=NIGHTLY-CARDS · CIs=CDCLR, FXFEED · scheduler=ENDED_NOT_OK · SLA 05:00Z
+  residual (conflicting_signals): spool text spans dataset + security; dependency state and message text disagree
+  window: lines 1–5 of 5 · redaction: key-material×1, dataset×1
+    03:48:40 JOB13090  +CDC0620I SETTLEMENT PASS STARTED, 42,118 ITEMS
+    03:48:44 JOB13090  +CDC0641E PIN VERIFY FAILED RC=68 <key-material-redacted> ON KEY SET 04
+    03:48:47 JOB13090  +CDC0644W RATE LOOKUP FALLBACK USED, SOURCE <dsn:1> EMPTY
+    … 2 more line(s)
+  distribution: RB-HSM-KEYROT 91.0% · RB-MQ-CHANNEL 3.2% · none-of-these 3.2% · margin 0.88 · entropy 0.22 · sufficiency 88%
+  OPS QUEUE  recommendation refused by revalidation against authoritative state
+    ✗ preconditions do not hold: HSM-01 is not in the incident's affected CI set
+  ownership: FXFEED: CMDB ownership contested between market-data and treasury-ops; bridge confirms before handoff
+  recommendation RB-HSM-KEYROT recorded but not acted on — ledger marks the divergence
+
+INC-4481  GLEXTR40  …
+  OPS QUEUE  no usable answer (malformed_response); routed exactly as it would have been without the service
+  malformed_response: response missing a usable choice or probabilities (0ms) · assigned finance-systems
+  ownership: DB2P01: CMDB record flagged stale; ownership unconfirmed
+
+INC-4482  CDCLR40  …
+  OPS QUEUE  no usable answer (timeout); routed exactly as it would have been without the service
+  timeout: Request timed out after 400ms. (404ms) · assigned cards-platform
+
+INC-4483  CBSTMT30  flow=NIGHTLY-CORE · CIs=CBSTMT · scheduler=ENDED_NOT_OK · SLA 06:00Z
+  residual (unmapped_vendor_message): vendor message identifier is not present in the mapping table
+  distribution: none-of-these 74.0% · RB-DB2-CONTENTION 15.1% · RB-LOADLIB 6.0% · margin 0.59 · entropy 0.53 · sufficiency 69%
+  OPS QUEUE  answered none-of-these; the catalog does not cover this evidence
+    ✗ none-of-these
+
+Where the incidents went
+────────────────────────────────────────
+  ops_queue               5
+  deterministic_runbook   3
+  linked_to_predecessor   1
+  scheduler_retry         1
+  freeze_downstream       1
+  suppressed_duplicate    1
+  runbook_suggested       1
+
+  7 of 13 resolved before any request was built; 6 request(s) made.
+  1 incident(s) reached a suggested procedure; every other residual incident went to the ordinary queue.
+
+Ledger
+────────────────────────────────────────
+one record per decision; recommendation and executed action are separate fields
+  …
+  runbook_suggested  recommended=RB-CARD-SCHEME-CUTOVER       executed=RB-CARD-SCHEME-CUTOVER
+  ops_queue          recommended=RB-FEED-LATE                 executed=ops_queue  ⚠ diverged
+  ops_queue          recommended=RB-HSM-KEYROT                executed=ops_queue  ⚠ diverged
+  ops_queue          recommended=(none)                       executed=ops_queue
+  ops_queue          recommended=(none)                       executed=ops_queue
+  ops_queue          recommended=none-of-these                executed=ops_queue  ⚠ diverged
+```
+
+#### The case that matters
+
+`INC-4480` is scripted to be **confidently wrong**: 91% of the mass on an HSM
+key-rotation procedure, a margin of 0.88 and a normalized entropy of 0.22. It
+passes every threshold in the policy file. No flatness or margin test catches a
+peaked error — that is what makes it worth including.
+
+It is refused because the procedure declares preconditions (`HSM-01` in the
+affected CI set, an open change window on that CI) and authoritative state does
+not satisfy them. The refusal comes from revalidating the recommendation against
+the same sources the deterministic stage read, not from anything about the
+distribution. Where no such check exists, nothing here would have caught it.
+
+#### Claims
+
+Full contract: [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
+
+**May claim.** Known structured mappings and dependency conditions are resolved
+deterministically first. Jev receives only a controlled catalog of candidate
+runbooks plus `none-of-these`. The application routes ambiguous or split
+distributions to the ordinary operations queue. The safe fallback does not depend
+on Jev returning a correct answer. Log preprocessing extracts bounded diagnostic
+windows and deterministically redacts the configured fields before anything is
+sent. Scripted fixtures exercise confident, ambiguous, malformed-response,
+timeout and fallback paths. The ledger distinguishes the recommendation from the
+route actually taken. The example demonstrates bounded residual routing control
+flow.
+
+**Must not claim.** That Jev identifies root cause. That it understands abend
+codes or spool output. That it selects the *correct* runbook. That the
+probabilities are calibrated. That the pattern reduces MTTR, paging volume or
+misrouting. That the catalog or CMDB is complete or current. That a recent
+deployment caused anything. That a log tail is sufficient evidence. That this is
+safe to automate without task-specific validation. That an offline run
+demonstrates live reliability, cost or latency.
+
+Two limits are worth restating because the output makes them easy to miss.
+Redaction is pattern-based: it removes the configured patterns deterministically,
+and content matching no configured pattern survives into the request — it is
+minimization, not a data-loss-prevention control. And the thresholds
+(`08-runbook-routing/illustrative-v1`) are illustrative, chosen to make the paths
+visible; they are not empirically derived and are not valid across a different
+candidate-set size.
+
+---
+
+### [`examples/fsi/eval/`](examples/fsi/eval) — what the thresholds are worth
+
+Both examples gate on the same three distribution statistics, with numbers
+chosen by their authors. `npm run fsi:eval` runs both examples as subprocesses,
+reads their ledgers back, and re-scores every recorded decision against a sweep
+of thresholds. Nothing in either pipeline is reimplemented to do it.
+
+The table trades coverage against escalation, which is the ordinary reason to
+sweep a threshold. The column that matters is the last one: decisions that
+**passed every distribution test and were then vetoed by deterministic code**.
+That column is computed, not labelled — it falls out of comparing each recorded
+decision's metrics against its own recorded thresholds and then reading whether
+the executed action diverged from the recommendation.
+
+There are two such decisions, one per example, and the sweep shows they do not
+go away:
+
+```
+  min mass  scored  accepted  escalated  contradicted
+      0.50       4         2          2             1
+      ...
+      0.90       4         1          3             1
+      0.95       4         0          4             0
+```
+
+At `0.90`, example 08 accepts exactly one decision and it is the wrong one. The
+`91%` recommendation to run a key-rotation runbook against a host that was not
+in the incident's affected set survives every tightening that does not shut the
+automation off entirely, because it was never an uncertain answer — it was a
+confident answer to a question asked against stale state. Raising the bar
+discarded the sound acceptance first.
+
+That is the argument for keeping the deterministic preconditions, not for
+picking a better number. A threshold sweep can buy you coverage or caution. It
+cannot buy you the check that reads authoritative state.
+
+**There is no accuracy column, deliberately.** The distributions come from
+[`src/mock-fetch.ts`](src/mock-fetch.ts), which scripts both the answer and the
+shape of the distribution around it. Scoring accuracy over manufactured
+distributions would measure the fixture author, not the model. The fixture
+labels in both examples are recorded as priors committed before the run, and
+they are explicitly not treated as ground truth.
+
+[`perturb.ts`](examples/fsi/eval/perturb.ts) is the live counterpart — it
+measures how a real distribution moves when a spurious option is added or a
+correct one removed, which is the question the offline sweep cannot ask. **It
+has never been run**, for the same reason as everything else here.
+
+---
+
 ## Running the examples
 
 ```bash
 npm install
 node examples/01-quickstart.ts   # or: npm run quickstart
-npm run all                      # examples 01–04, in order
+npm run all                      # examples 01–04 and the FSI set, in order
+
+npm run fsi:07                   # bounded next-step recommendation
+npm run fsi:08                   # residual incident runbook routing
+npm run fsi:eval                 # threshold sweep over both ledgers
+npm run check:foundation         # 21 assertions over src/ledger.ts
 
 npm run record                   # 05: real Chrome, recorded
 npm run compare                  # 06: Jev vs a control model, side by side
@@ -355,9 +799,9 @@ There is no build step. The examples are `.ts` files executed directly by
 published SDKs — `@typesafe-ai/sdk`, `ai`, `@ai-sdk/gateway` and `zod` — and
 nothing in `src/` reimplements any of them.
 
-`npm run all` deliberately stops at 04 so the repo keeps its clone-and-run
-property. 05 and 06 add `webreel`, which downloads Chrome and ffmpeg into
-`~/.webreel` on first use.
+`npm run all` deliberately stops short of 05 and 06 so the repo keeps its
+clone-and-run property. Those two add `webreel`, which downloads Chrome and
+ffmpeg into `~/.webreel` on first use.
 
 > **Known upstream issue.** webreel 0.1.4 requests an ffmpeg build
 > (`ffmpeg-n7.1-…`) that its upstream no longer publishes, so the download 404s
@@ -427,9 +871,19 @@ src/browser-driver.ts launch, record, describe, click — everything that is not
 src/chrome-launch.ts  Chrome that webreel's recorder can actually capture (see the note above)
 src/compose.ts        side-by-side stacking and GIF export, on webreel's ffmpeg
 src/ui.ts             console formatting
+src/fixture-label.ts  SCRIPTED_MOCK vs LIVE_API labelling, applied to every FSI run
+src/ledger.ts         JSONL decision ledger, metricsFor(), canonical hashing
+src/ledger.check.ts   21 assertions over the above — npm run check:foundation
+src/authority.ts      authoritative-state revalidation used by example 07
+src/workflow-machine.ts  the permitted-transition machine 07 recommends within
+src/runbook-catalog.ts   the bounded runbook option set for example 08
+src/log-redact.ts     configured-field redaction for ledger payloads
 examples/             the six TypeScript examples, plus site/ and python/
+examples/fsi/         the two FSI examples and the eval harness
 docs/media/           recordings produced by examples 05 and 06
 docs/SDKS.md          which SDK to use, and the naming trap between them
+docs/CLAIM-CONTRACTS.md  what each FSI example is and is not allowed to claim
+docs/FSI-BOUNDARIES.md   where the domain scope stops
 ```
 
 Everything in `src/` is either composition (`rubric.ts`, `browser-policy.ts`),
@@ -458,6 +912,31 @@ one-to-one — [`docs/SDKS.md`](docs/SDKS.md) has the table.
 **Not verified here:** no request in this repo has been run against the live
 TypeSafe API or the live Gateway — there was no API key in the build
 environment.
+
+---
+
+## Not yet answered by this repository
+
+This repo is deliberately narrow. It shows Jev used through the published `@typesafe-ai/sdk`, with ordinary TypeScript code building a bounded question, receiving a distribution, and applying an abstention or escalation rule outside the model. That is real application control flow. It is not evidence that the returned distribution is correct, calibrated, stable, or safe to automate in a bank.
+
+The most important caveat is also the simplest: **nothing in this repository has ever been run against the live TypeSafe API.** No API key was used to produce anything you see here. Every Choice, Score, Noul, probability table, example output, and recording shown here is driven by manufactured responses from [`src/mock-fetch.ts`](src/mock-fetch.ts). The mock exercises the SDK request path and the surrounding policy code; it also manufactures both the selected answer and the shape of the distribution. An offline run proves the harness behaves under scripted model outputs. It does not tell you how the real service answers, how confident it is, how long it takes, or how often it is available.
+
+The full FSI boundary document is [`docs/FSI-BOUNDARIES.md`](docs/FSI-BOUNDARIES.md). The README version is shorter because an architect who has read the examples mainly needs to know where the line is.
+
+Open questions before this pattern belongs near production:
+
+1. **Deployment and data handling.** This repo does not answer where request state is processed, which regions are used, what is retained, whether inputs are used for training, which subprocessors can see them, how support access works, or how deletion and encryption are enforced.
+2. **Input classification and minimization.** The examples pass compact state objects. They do not decide whether real transaction records, account identifiers, payment narratives, customer text, spool logs, hostnames, or operational metadata may be sent to a third-party service at all.
+3. **Probability semantics.** The strongest objection is fair: a model-produced distribution is still a model output, so why trust its shape more than its argmax? Treating a flat distribution as ambiguous is a useful heuristic. It becomes a safety property only after showing, on representative data, that confidence correlates with correctness, calibration survives service updates, high-confidence errors are rare enough, and thresholds are not invalidated by adding, removing, reordering, or rewording the option set. None of that evidence is here.
+4. **Evidence beyond fixtures.** The FSI examples can show what the policy would do for scripted confident, ambiguous, malformed, timeout, and fallback cases, and [`examples/fsi/eval/`](examples/fsi/eval) can show how that policy's behaviour moves as its thresholds move. Both operate over manufactured distributions. They do not measure model quality, risk coverage, service reliability, or live cost.
+5. **Degraded operation.** The examples include fail-closed branches, but not production timeout budgets, retry policy, idempotency keys, duplicate-request handling, circuit breakers, fallback UX, or queue operations when the service is slow or unavailable.
+6. **Change governance.** Candidate catalogs, thresholds, eligibility rules, prompt wording, SDK versions, and service versions are all control surfaces. This repo does not define who approves changes, how they are tested, how rollback works, or how evidence is retained.
+7. **Automation bias.** Escalation to a human is not automatically a control. Reviewers can anchor on the preselected answer, rubber-stamp queues under load, or lack the evidence needed to disagree. That operational design is outside the repo.
+8. **Ledger trust.** Emitted JSON records are useful for replay and debugging, but they are not an audit trail merely because they exist. Immutability, completeness, access control, retention, independent verification, and tamper evidence are not implemented.
+9. **Baseline comparison.** The repo does not prove this pattern is better than rules, search, existing classifiers, metadata lookups, or asking an operator. In some domains the deterministic baseline is the right answer.
+10. **Threat model.** Bounded output prevents Jev from inventing a new option. It does not prevent malicious or stale input from shifting probability toward a harmful option that your code made eligible.
+
+Those gaps do not invalidate the examples. They define what the examples are: SDK wiring, bounded option construction, deterministic eligibility checks, abstention policies, fallbacks, and ledgers around scripted distributions. The missing work is the empirical and operational evidence required to trust the distribution in a regulated workflow.
 
 ---
 

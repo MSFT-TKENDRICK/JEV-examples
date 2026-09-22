@@ -148,16 +148,20 @@ not on the allowed list, it does not go in.
 
 ## Evaluation harness
 
-> **Status: not yet built.** This contract is written ahead of the code, which is
-> Phase 2 work. Until `examples/fsi/eval/` exists, none of the claims below may be
-> made anywhere — including in a README that has been assembled early.
+Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
 
 ### May claim
 
 - The offline sweep measures **how the policy behaves** across the fixture
   population as thresholds move.
-- It reports auto-handled fraction, escalation rate and would-have-acted-wrongly
-  counts against fixture-assigned labels.
+- It reports, per threshold, the number of recorded decisions scored, accepted
+  and escalated.
+- It reports a **contradicted** count: decisions whose recorded metrics cleared
+  their own recorded thresholds, but whose executed action diverged from the
+  recommendation because deterministic code vetoed it. This is computed from
+  the ledger, not read from a label.
+- It runs both examples as subprocesses and reads their ledgers, so it exercises
+  the real pipelines rather than a reimplementation of them.
 - The live perturbation harness ships as runnable code requiring a real
   `TYPESAFE_API_KEY`.
 
@@ -166,5 +170,13 @@ not on the allowed list, it does not go in.
 - The sweep measures Jev's calibration or accuracy. It measures a policy applied
   to **scripted** distributions, which were manufactured by `src/mock-fetch.ts`.
 - The resulting curve is a risk/coverage curve for the model.
+- Accuracy, correctness, or "would have acted wrongly" counts against the
+  fixture labels. Those labels are priors committed by the fixture author, not
+  ground truth, and the distributions were manufactured alongside them — any
+  accuracy figure would describe the author rather than the model. **The sweep
+  therefore has no accuracy column, and must not grow one while the fixtures
+  are scripted.**
+- That the contradicted count is a measured error rate. It is a count of two
+  hand-written fixtures that were built to contain exactly that case.
 - The perturbation results are known. **The live path has never been executed.**
   The repo ships the instrument, not the findings.

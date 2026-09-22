@@ -39,15 +39,15 @@ check('component cannot be overwritten', spoofed.component === 'check', spoofed.
 // 2. BLOCKING: degenerate distributions must not look confident.
 const policyWouldAutoApprove = (m: { normalizedEntropy: number; margin: number }) =>
   m.normalizedEntropy <= 0.3 && m.margin >= 0.4;
-const single = metricsFor({ freeze: 1 }, 'freeze');
-const empty = metricsFor({}, 'anything');
+const single = metricsFor({ freeze: 1 }, 'freeze', ['freeze']);
+const empty = metricsFor({}, 'anything', ['a', 'b', 'c']);
 check('single-option set is not auto-approved', !policyWouldAutoApprove(single), JSON.stringify(single));
 check('empty distribution is not auto-approved', !policyWouldAutoApprove(empty), JSON.stringify(empty));
 check('offered count beats returned count', metricsFor({ a: 0.9, b: 0.1 }, 'a', ['a', 'b', 'c', 'd']).optionCount === 4);
 
 // 3. Unknown selected key must throw rather than silently report 0.
 try {
-  metricsFor({ a: 0.9, b: 0.1 }, 'freeze_card');
+  metricsFor({ a: 0.9, b: 0.1 }, 'freeze_card', ['a', 'b']);
   check('unknown selected key throws', false);
 } catch {
   check('unknown selected key throws', true);

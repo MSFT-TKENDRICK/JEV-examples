@@ -69,3 +69,16 @@ export function verdictColor(verdict: 'pass' | 'review' | 'fail'): string {
 export function pct(value: number | undefined): string {
   return value === undefined ? 'n/a' : `${(value * 100).toFixed(1)}%`;
 }
+
+/**
+ * A dimmed, indented block of continuation lines.
+ *
+ * Both FSI examples were indenting explanatory lines by hand at every call
+ * site, which is how the same paragraph ends up at three different indents.
+ * Blank lines are preserved as blank rather than as indented whitespace.
+ */
+export function note(lines: string | readonly string[], indent = 4): string {
+  const list = typeof lines === 'string' ? lines.split('\n') : lines;
+  const pad = ' '.repeat(indent);
+  return list.map((line) => (line.trim() === '' ? '' : `${pad}${dim(line)}`)).join('\n');
+}
