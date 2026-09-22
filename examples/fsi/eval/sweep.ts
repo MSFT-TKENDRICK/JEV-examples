@@ -20,6 +20,24 @@
  * *and* the shape of the distribution. An accuracy number computed over
  * manufactured distributions would measure the fixture author, not the model.
  *
+ * ## The sweep is counterfactual; the probe trail is not
+ *
+ * This distinction matters and is easy to lose.
+ *
+ * Moving a threshold is a **counterfactual**: it asks what the policy would have
+ * done to a recorded distribution under a gate that was never actually applied.
+ * So the sweep can say a decision would or would not have cleared a given gate,
+ * and therefore whether the application would have acted immediately or gone
+ * looking for evidence. It **cannot** say what that investigation would have
+ * found, because the probes that were run were selected against the real gate,
+ * and a different gate would have selected differently. The `investigated`
+ * column is therefore a count of decisions that would need evidence — never a
+ * prediction that the evidence would arrive.
+ *
+ * What is not counterfactual is the recorded probe trail. `probes` and
+ * `execution` describe what the run actually did at its shipped thresholds, so
+ * they are reported separately and are not swept.
+ *
  * ## The one safety signal that is real
  *
  * `contradicted` counts decisions where the distribution gate **passed** and the
@@ -48,10 +66,16 @@ export interface SweepRow {
   gate: Gate;
   /** Decisions that reached a request and returned a usable distribution. */
   scored: number;
-  /** Of those, how many the gate would accept. */
-  accepted: number;
-  /** Of those, how many the gate would send to a human. */
-  escalated: number;
+  /** Of those, how many the gate would let act immediately, with no probing. */
+  acted: number;
+  /**
+   * Of those, how many the gate would send looking for more evidence.
+   *
+   * This is *not* a count of refusals. A decision that fails the gate goes on to
+   * probe, and may well resolve; whether it does is not knowable at a threshold
+   * that was never run. See the note on counterfactuals in the header.
+   */
+  investigated: number;
   /** Accepted decisions that a deterministic check nonetheless vetoed. */
   contradicted: number;
 }
@@ -110,17 +134,75 @@ export function sweep(records: readonly DecisionRecord[], gates: readonly Gate[]
   const scored = records.filter(scoreable);
 
   return gates.map((gate) => {
-    const accepted = scored.filter(
+    const acted = scored.filter(
       (r) => passesGate(r, gate) && !isNoneOption(r.recommendation?.choice ?? ''),
     );
     return {
       gate,
       scored: scored.length,
-      accepted: accepted.length,
-      escalated: scored.length - accepted.length,
-      contradicted: accepted.filter(deterministicallyContradicted).length,
+      acted: acted.length,
+      investigated: scored.length - acted.length,
+      contradicted: acted.filter(deterministicallyContradicted).length,
     };
   });
+}
+
+/**
+ * What the runs actually did, as opposed to what a swept threshold would have
+ * done. Read straight off the recorded probe trail and execution outcome, so
+ * unlike the sweep it involves no counterfactual reasoning at all.
+ */
+export interface ResolutionSummary {
+  /** Decisions that reached a usable distribution. */
+  scored: number;
+  /** Of those, how many needed no probe at all. */
+  actedImmediately: number;
+  /** How many probed and then went on to execute something. */
+  resolvedByProbing: number;
+  /** How many probed, ran out of budget, and refused. Nothing was changed. */
+  refusedAfterProbing: number;
+  /** Total probes spent across every decision. */
+  probesSpent: number;
+  /** Total cost units spent on probes, in the units the examples authored. */
+  probeCost: number;
+  /**
+   * Total nats of entropy removed, summed over probes.
+   *
+   * A measure of how much the authored probe set moved the authored priors. It
+   * says nothing about calibration: the prior was scripted, so the posterior is
+   * a consequence of the script.
+   */
+  entropyRemoved: number;
+  /**
+   * Runs that ended with partial effects the compensator could not undo.
+   *
+   * Should be zero, and is reported precisely so that it is visible when it is
+   * not. `inconsistent` is a loud failure, never a synonym for handled.
+   */
+  inconsistent: number;
+}
+
+export function resolution(records: readonly DecisionRecord[]): ResolutionSummary {
+  const scored = records.filter(scoreable);
+  const probed = scored.filter((r) => r.probes.length > 0);
+
+  return {
+    scored: scored.length,
+    actedImmediately: scored.filter((r) => r.probes.length === 0).length,
+    resolvedByProbing: probed.filter((r) => r.execution?.outcome === 'completed').length,
+    refusedAfterProbing: probed.filter((r) => r.execution?.outcome === 'refused').length,
+    probesSpent: scored.reduce((total, r) => total + r.probes.length, 0),
+    probeCost: scored.reduce(
+      (total, r) => total + r.probes.reduce((sum, p) => sum + p.costUnits, 0),
+      0,
+    ),
+    entropyRemoved: scored.reduce(
+      (total, r) =>
+        total + r.probes.reduce((sum, p) => sum + (p.priorEntropy - p.posteriorEntropy), 0),
+      0,
+    ),
+    inconsistent: scored.filter((r) => r.execution?.outcome === 'inconsistent').length,
+  };
 }
 
 /**
