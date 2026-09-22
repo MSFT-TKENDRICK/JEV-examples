@@ -14,7 +14,9 @@ import type { ConsideredProbe, DecisionRecord, ProbeRecord } from '../../../src/
 import { probeEconomy, resolution } from './sweep.ts';
 
 let failures = 0;
+let total = 0;
 const check = (name: string, ok: boolean, detail = '') => {
+  total++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures++;
 };
@@ -214,6 +216,6 @@ function recordWith(probes: readonly ProbeRecord[]): DecisionRecord {
 }
 
 console.log(
-  failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`,
+  failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`,
 );
 if (failures > 0) process.exit(1);

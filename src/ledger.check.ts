@@ -13,7 +13,9 @@ import { createLedger, metricsFor, hashState, stateReference } from './ledger.ts
 import { fixtureMarkdown } from './fixture-label.ts';
 
 let failures = 0;
+let total = 0;
 const check = (name: string, ok: boolean, detail = '') => {
+  total++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures++;
 };
@@ -132,5 +134,5 @@ check('entries() returns a copy', ledger.entries().length !== snapshot.length);
 // 7. Markdown disclosure must not swallow following prose.
 check('fixtureMarkdown ends with a blank line', fixtureMarkdown(false).endsWith('\n\n') && fixtureMarkdown(true).endsWith('\n\n'));
 
-console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
+console.log(failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
