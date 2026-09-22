@@ -72,13 +72,19 @@ it catches a fragment edited without reassembling.
 
 ## Expected files
 
-| File | Owner |
+The second column is each fragment's own `###` title, verbatim. `npm run readme`
+and `npm run readme:check` verify this table against the files on disk and
+refuse if it has drifted, so renaming a fragment's heading without updating this
+row fails the build rather than leaving a description that quietly stops being
+true.
+
+| File | Title |
 |---|---|
-| `01.md` | Example 01 — quickstart |
-| `02.md` | Example 02 — judge with rubrics |
-| `03.md` | Example 03 — agent harness |
-| `04.md` | Example 04 — browser use, simulated |
-| `05.md` | Example 05 — browser use, live |
-| `06.md` | Example 06 — Jev versus a point-estimate control |
-| `07.md` | Example 07 — bounded next-step recommendation |
-| `08.md` | Example 08 — residual incident runbook routing |
+| `01.md` | 01 — Quickstart: one request, five questions, and what the answer does next |
+| `02.md` | 02 — Model-as-a-judge: when the judge is torn, it decomposes |
+| `03.md` | 03 — Agent harness: uncertainty selects the next machine action |
+| `04.md` | 04 — Browser use: pick an element, never invent one |
+| `05.md` | 05 — The same loop, against a real browser |
+| `06.md` | 06 — The same maze, twice |
+| `07.md` | 07 — Uncertainty selects the next machine action |
+| `08.md` | 08 — Residual incident runbook routing, by expected information gain |
