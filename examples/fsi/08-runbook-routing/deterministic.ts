@@ -118,8 +118,8 @@ export function resolveDeterministically(incident: Incident): DeterministicOutco
       route: 'freeze_downstream',
       source: 'reconciliation-control',
       sourceVersion: reconciliation.control,
-      action: 'freeze downstream submission and page the control owner',
-      runbookId: 'RB-CTL-BREAK',
+      action: 'hold downstream submission and apply RM-CTL-REBUILD',
+      runbookId: 'RM-CTL-REBUILD',
       reason: `control ${reconciliation.control} out by ${variance} items; prescribed response, no model involved`,
     };
   }
@@ -133,7 +133,7 @@ export function resolveDeterministically(incident: Incident): DeterministicOutco
         route: 'deterministic_runbook',
         source: 'abend-mapping-table',
         sourceVersion: ABEND_TABLE_VERSION,
-        action: `open ${runbookId}`,
+        action: `apply ${runbookId}`,
         runbookId,
         reason: `${incident.abendCode} is mapped`,
       };
