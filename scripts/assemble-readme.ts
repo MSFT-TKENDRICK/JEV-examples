@@ -66,10 +66,16 @@ function fail(message: string): never {
  *
  * Anchors, absolute URLs and links inside fenced blocks are left alone; the
  * fenced ones are sample output rather than navigation.
+ *
+ * Returns how many links it rewrote, so the caller can report a denominator.
+ * A guard that only ever says "no failures" reads identically whether it
+ * checked everything or matched nothing — which is how this repository shipped
+ * four checkers that passed while measuring nothing.
  */
-function rebaseLinks(body: string, id: string): string {
+function rebaseLinks(body: string, id: string): { text: string; rebased: number } {
   let fenced = false;
-  return body
+  let rebasedCount = 0;
+  const text = body
     .split('\n')
     .map((line, index) => {
       if (/^\s*```/.test(line)) {
@@ -90,11 +96,13 @@ function rebaseLinks(body: string, id: string): string {
               `a README assembled from it would ship a dead link.`,
           );
         }
+        rebasedCount += 1;
         const rebased = relative(ROOT, absolute).split('\\').join('/');
         return `](${anchor === undefined ? rebased : `${rebased}#${anchor}`})`;
       });
     })
     .join('\n');
+  return { text, rebased: rebasedCount };
 }
 
 /** Fragment ids present on disk, so an unexpected file is an error not a no-op. */
@@ -141,8 +149,14 @@ function regions(lines: readonly string[]): Region[] {
  * character, hyphen or space, then turn each remaining space into a hyphen.
  * Runs of spaces are *not* collapsed, so `06 — The same maze` slugs with a
  * double hyphen once the em dash is dropped.
+ *
+ * Refuses outright if it parsed no headings. That is not a README this script
+ * could ever produce, so it means the heading pattern stopped matching rather
+ * than that the document is clean — the failure that made an earlier version of
+ * this check report a clean sweep over zero parsed headings, because README.md
+ * is CRLF and JavaScript's `.` excludes `\r`.
  */
-function checkAnchors(markdown: string): void {
+function checkAnchors(markdown: string): { headings: number; anchors: number } {
   const normalized = markdown.replace(/\r\n/g, '\n');
   const slugs = new Set<string>();
   let fenced = false;
@@ -163,8 +177,17 @@ function checkAnchors(markdown: string): void {
       );
     }
   }
+  if (slugs.size === 0) {
+    fail(
+      'anchor check parsed no headings from the assembled README, so it was ' +
+        'about to report every anchor as valid without having looked at one. ' +
+        'The heading pattern has stopped matching.',
+    );
+  }
+  let anchors = 0;
   for (const link of normalized.matchAll(/\]\(#([^)]+)\)/g)) {
     const anchor = link[1];
+    anchors += 1;
     if (anchor !== undefined && !slugs.has(anchor)) {
       fail(
         `README.md links to #${anchor}, which matches no heading. If a fragment ` +
@@ -173,6 +196,7 @@ function checkAnchors(markdown: string): void {
       );
     }
   }
+  return { headings: slugs.size, anchors };
 }
 
 function main(): void {
@@ -207,6 +231,7 @@ function main(): void {
 
   // Splice from the bottom up so earlier indices stay valid.
   const out = [...lines];
+  let links = 0;
   for (const region of [...found].sort((a, b) => b.marker - a.marker)) {
     const body = readFileSync(join(FRAGMENTS, `${region.id}.md`), 'utf8').trim();
     if (!/^### /.test(body)) {
@@ -232,26 +257,34 @@ function main(): void {
         );
       }
     });
-    out.splice(region.marker + 1, region.end - region.marker - 1, '', rebaseLinks(body, region.id), '');
+    const rewritten = rebaseLinks(body, region.id);
+    links += rewritten.rebased;
+    out.splice(region.marker + 1, region.end - region.marker - 1, '', rewritten.text, '');
   }
 
   const assembled = `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 
-  checkAnchors(assembled);
+  const { headings, anchors } = checkAnchors(assembled);
+  // State the denominators. "No failures" is identical whether the guard checked
+  // everything or matched nothing, so the counts are the part that makes a clean
+  // run falsifiable.
+  const measured =
+    `${found.length} fragment(s), ${links} link(s) rebased, ` +
+    `${anchors} anchor(s) against ${headings} heading(s)`;
 
   if (checkOnly) {
     if (assembled !== original) {
       fail('README.md is out of date with docs/fragments/. Run: npm run readme');
     }
-    console.log(`README.md is up to date with ${found.length} fragment(s).`);
+    console.log(`README.md is up to date: ${measured}.`);
     return;
   }
 
   writeFileSync(README, assembled, 'utf8');
   console.log(
     assembled === original
-      ? `README.md already up to date with ${found.length} fragment(s).`
-      : `README.md assembled from ${found.length} fragment(s): ${marked.join(', ')}.`,
+      ? `README.md already up to date: ${measured}.`
+      : `README.md assembled from ${measured}: ${marked.join(', ')}.`,
   );
 }
 
