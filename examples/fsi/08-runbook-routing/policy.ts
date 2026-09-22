@@ -1,37 +1,59 @@
 /**
- * The routing policy: thresholds, and what happens when they are not met.
+ * The routing policy: thresholds, the investigation budget, and what happens
+ * when the distribution will not concentrate.
  *
- * Two design points carry most of the weight here.
+ * Three design points carry the weight here.
  *
- * **The default is the ordinary operations queue.** Every path that is not an
- * affirmative pass lands there, including every failure path. The queue is where
- * these incidents went before any of this existed, so the fallback is not a
- * degraded mode — it is the status quo, and it does not depend on the service
- * answering, answering quickly, or answering correctly.
+ * **There is no queue.** Every route this file can return is a machine action or
+ * a terminal refusal. Nothing parks a decision in front of a person, and nothing
+ * creates work for one. When the evidence does not support acting, the program
+ * either goes and gets more evidence or stops having changed nothing.
  *
- * **Thresholds are illustrative.** They were chosen to make the fixture paths
- * legible in a terminal. They are not empirically selected, they are not
- * calibrated, and they are not portable: a threshold tuned against six candidate
- * procedures is not valid for twenty, because the probabilities themselves move
- * when the option set changes.
+ * **Refusing is terminal, and it is not a failure mode to be minimised.** A run
+ * that refuses has produced a correct outcome: it has stated what it could not
+ * establish, and it has left the incident exactly as it found it. The temptation
+ * to soften a refusal into "raised for attention" is precisely the thing this
+ * design removed.
+ *
+ * **Thresholds and budgets are illustrative.** They were chosen to make the
+ * fixture paths legible in a terminal. They are not empirically selected, not
+ * calibrated, and not portable: a threshold tuned against seven candidate
+ * remediations is not valid for twenty, because the probabilities themselves
+ * move when the option set changes. The same is true of the probe budget —
+ * `maxCostUnits` is denominated in units this repository invented.
  */
 
 import type { DistributionMetrics } from '../../../src/ledger.ts';
 
-/** Every terminal route this example can take. */
+/**
+ * Every route this example can take.
+ *
+ * The names are the ones `src/ledger.ts` documents, so an external reader of the
+ * ledger — including `examples/fsi/eval` — sees the vocabulary the ledger's own
+ * comments describe rather than a private dialect.
+ *
+ * `probe` is the only non-terminal route. Everything else ends the incident.
+ */
 export type Route =
+  // Resolved by a lookup, before any request was built.
   | 'deterministic_runbook'
   | 'linked_to_predecessor'
   | 'scheduler_retry'
   | 'freeze_downstream'
   | 'suppressed_duplicate'
-  | 'runbook_suggested'
-  | 'ops_queue';
+  // The investigation loop.
+  | 'probe'
+  // Terminal outcomes of acting.
+  | 'act'
+  | 'rolled_back'
+  | 'inconsistent'
+  // Terminal outcome of not acting.
+  | 'refused';
 
-export const POLICY_VERSION = '08-runbook-routing/illustrative-v1';
+export const POLICY_VERSION = '08-runbook-routing/eig-illustrative-v1';
 
 export const THRESHOLDS = {
-  /** Minimum mass on the selected procedure. */
+  /** Minimum mass on the selected remediation before it is executed. */
   minSelectedProbability: 0.7,
   /** Minimum top-1 minus top-2. Catches "peaked, but contested". */
   minMargin: 0.25,
@@ -49,25 +71,74 @@ export type Thresholds = {
   minEvidenceSufficient: number;
 };
 
+/**
+ * What the investigation is allowed to spend before it gives up.
+ *
+ * Two dimensions, not one, and the second is the interesting one. A count-only
+ * budget makes every diagnostic equally affordable, which quietly removes the
+ * reason to rank on cost at all. With a cost ceiling, an expensive diagnostic
+ * can be the highest-gain option available and still be the wrong thing to run,
+ * which is the trade an overnight batch window forces constantly.
+ */
+export const INVESTIGATION = {
+  /** Diagnostics runnable per incident. */
+  maxProbes: 3,
+  /** Total authored cost units spendable per incident. Not minutes. */
+  maxCostUnits: 5,
+  /**
+   * Absolute floor, in nats, on what a diagnostic must be expected to remove.
+   * Below this the loop stops probing; whether it then acts or refuses is
+   * decided by the thresholds above, not by this number.
+   */
+  minimumGain: 0.05,
+  /**
+   * Floor as a fraction of the prior entropy. Scale-independent and usually the
+   * more meaningful of the two: removing 0.1 nats means something very different
+   * against a prior of 0.15 nats than against one of 2.0.
+   */
+  minimumGainFraction: 0.08,
+  /**
+   * Stop probing once the leader holds this much mass, whatever gain remains on
+   * the table.
+   *
+   * This is a budget rule, not an optimality result. A cheap diagnostic against
+   * a 0.88 leader can still carry real expected gain, because the 12% branch
+   * would genuinely change the answer. What this encodes is a decision that the
+   * flip is not worth paying to find.
+   */
+  decisionThreshold: 0.88,
+} as const;
+
 export interface PolicyInput {
   choice: string;
   metrics: DistributionMetrics;
   evidenceSufficient: number;
-  /** `none-of-these` is a valid answer and is always routed to a human. */
+  /** `none-of-these` is a valid answer, and it means the catalog does not apply. */
   isNoneOption: boolean;
   /** Result of revalidating the recommendation against authoritative state. */
   precondition: { holds: boolean; reason?: string };
 }
 
 export interface PolicyDecision {
-  route: Route;
+  /** `act` when the distribution supports executing; otherwise `refused`. */
+  route: 'act' | 'refused';
   reason: string;
   /** Every condition that failed, so the output is diagnosable rather than binary. */
   failed: readonly string[];
+  /**
+   * True when the only thing standing between this distribution and an action is
+   * its shape — so more evidence could change the answer.
+   *
+   * False when the block is categorical: `none-of-these`, or a precondition that
+   * authoritative state does not satisfy. Neither of those gets better by
+   * looking harder at the same incident, so the loop must not spend budget
+   * probing them.
+   */
+  probeable: boolean;
 }
 
 /**
- * Applies the policy.
+ * Applies the policy to one judgement.
  *
  * Note the precondition check. It is not one vote among several: it can veto a
  * recommendation that passed every distribution test, and it is the only check
@@ -79,9 +150,12 @@ export function decide(input: PolicyInput, thresholds: Thresholds = THRESHOLDS):
 
   if (isNoneOption) {
     return {
-      route: 'ops_queue',
-      reason: 'answered none-of-these; the catalog does not cover this evidence',
+      route: 'refused',
+      reason:
+        'answered none-of-these; no remediation in the catalog addresses this evidence, ' +
+        'and no diagnostic would change that',
       failed: ['none-of-these'],
+      probeable: false,
     };
   }
 
@@ -104,32 +178,49 @@ export function decide(input: PolicyInput, thresholds: Thresholds = THRESHOLDS):
       `evidence sufficiency ${evidenceSufficient.toFixed(2)} < ${thresholds.minEvidenceSufficient}`,
     );
   }
+
+  // Checked last and reported separately, because it is the one failure that no
+  // amount of further evidence about *this* incident can clear.
   if (!precondition.holds) {
-    failed.push(`preconditions do not hold: ${precondition.reason ?? 'unspecified'}`);
+    return {
+      route: 'refused',
+      reason: 'recommendation refused by revalidation against authoritative state',
+      failed: [...failed, `preconditions do not hold: ${precondition.reason ?? 'unspecified'}`],
+      probeable: false,
+    };
   }
 
   if (failed.length > 0) {
     return {
-      route: 'ops_queue',
-      reason: !precondition.holds
-        ? 'recommendation refused by revalidation against authoritative state'
-        : 'distribution did not meet the policy for an unattended suggestion',
+      route: 'refused',
+      reason: 'distribution does not support acting on this evidence',
       failed,
+      probeable: true,
     };
   }
 
   return {
-    route: 'runbook_suggested',
-    reason: `${choice} suggested as the first diagnostic step for the assigned engineer`,
+    route: 'act',
+    reason: `${choice} meets the policy for unattended execution`,
     failed,
+    probeable: true,
   };
 }
 
-/** What the failure of a call means. Never an approval, never a route. */
-export function fallbackFor(kind: 'timeout' | 'malformed_response' | 'service_error'): PolicyDecision {
+/**
+ * What the failure of a call means.
+ *
+ * A decision point that cannot answer must not stall the batch window and must
+ * not invent an action. It stops, having changed nothing. Note what is *not*
+ * here: no retry-with-a-person, no degraded route, no parking space.
+ */
+export function refusalFor(
+  kind: 'timeout' | 'malformed_response' | 'service_error',
+): PolicyDecision {
   return {
-    route: 'ops_queue',
-    reason: `no usable answer (${kind}); routed exactly as it would have been without the service`,
+    route: 'refused',
+    reason: `no usable answer (${kind}); stopped without changing anything`,
     failed: [kind],
+    probeable: false,
   };
 }

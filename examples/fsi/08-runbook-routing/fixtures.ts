@@ -1,20 +1,39 @@
 /**
  * Incident fixtures for example 08.
  *
- * Thirteen incidents from one overnight batch window. They are shaped to make one
- * thing visible: **most incidents in a batch shop are answered by lookups**, and
- * the ones that are not are not "harder tickets" — they are structurally
- * different. An unfamiliar vendor message, a cluster of low-level errors that
- * may all be consequences of one missing file, a condition the catalog does not
- * cover at all, and a case where the spool text and the dependency state point
- * at different subsystems.
+ * Sixteen incidents from one overnight batch window. They are shaped to make two
+ * things visible.
  *
- * Everything here is manufactured, including the model's answers. The scripted
- * distributions are chosen to exercise application paths, not to represent how
- * Jev would actually respond. One fixture (`INC-4480`) is deliberately scripted
- * with a **confident and wrong** recommendation, because the fallback has to hold
- * when the model is wrong, and a demo where the model is always right proves
- * nothing about that.
+ * **Most incidents in a batch shop are answered by lookups.** Seven of these are
+ * settled by the scheduler, the incident system, the reconciliation control or
+ * the abend table, and no request is built for them at all.
+ *
+ * **What is left is not "harder tickets" — it is structurally different work.**
+ * An unfamiliar vendor message; a cluster of low-level errors that may all be
+ * consequences of one upstream job that nobody paged on; a condition the catalog
+ * does not cover; a remediation that undoes itself when verification fails.
+ *
+ * ## What is scripted, and what is not
+ *
+ * Everything here is manufactured: the incidents, the spool text, the model's
+ * answers, the probability distributions, and — with exactly one exception —
+ * what each diagnostic observes when it runs.
+ *
+ * The exception is `DG-UPSTREAM-DEPGRAPH`, which computes its observation by
+ * walking `FLOW_SNAPSHOT` in `src/runbook-catalog.ts`. That one is a real
+ * traversal of structured state. Every other observation below is a string
+ * chosen by the author, and `DIAGNOSTIC_OBSERVATION_SOURCE` records which is
+ * which so nobody has to take this paragraph's word for it.
+ *
+ * Two fixtures exist specifically because the design has to survive being wrong:
+ *
+ * - `INC-4480` is scripted **confident and wrong** — 91% of the mass on a
+ *   key-management remediation whose preconditions authoritative state does not
+ *   satisfy. No threshold on a peaked distribution produces a refusal; ordinary
+ *   code has to.
+ * - `INC-4485` is scripted so that a reversible step **fails its verification**,
+ *   because a remediation runner that only ever succeeds has demonstrated
+ *   nothing about rollback.
  */
 
 import type { ComponentId } from '../../../src/runbook-catalog.ts';
@@ -48,6 +67,24 @@ export interface ReleaseTrain {
   components: readonly ComponentId[];
 }
 
+/**
+ * One scripted judgement.
+ *
+ * `rounds[0]` answers the first request. `rounds[n]` answers the request made
+ * after `n` diagnostics have run, so a fixture can say "the model was torn, then
+ * the upstream check came back and it was not torn any more". Running past the
+ * end of the array reuses the last entry, which is how a fixture expresses "more
+ * probing did not help".
+ */
+export interface ScriptedRound {
+  /** Explicit mass per remediation id. Anything omitted gets none. */
+  distribution: Readonly<Record<string, number>>;
+  /** The model's own sufficiency answer, which is also a model output. */
+  evidenceSufficient: number;
+  /** Why this round looks the way it does. Not a claim about correctness. */
+  note?: string;
+}
+
 export interface Incident {
   id: string;
   raisedAt: string;
@@ -70,13 +107,19 @@ export interface Incident {
   fixtureNote: string;
   /** Transport fault injected instead of a normal scripted response. */
   fault?: 'timeout' | 'malformed';
-  /** Scripted Jev answer, used only when the deterministic stage does not resolve. */
-  scripted?: {
-    runbook: string;
-    /** Probability mass the mock places on `runbook`. */
-    strength: number;
-    evidenceSufficient: number;
-  };
+  /** Scripted judgements, indexed by how many diagnostics have already run. */
+  rounds?: readonly ScriptedRound[];
+  /**
+   * What each diagnostic returns for this incident.
+   *
+   * Authored, with the single exception noted in this file's header. A
+   * diagnostic with no entry here returns `inconclusive`, which is deliberately
+   * *not* in any partition — so the Bayesian update falls back to the prior and
+   * the probe is visibly recorded as having bought nothing.
+   */
+  observations?: Readonly<Record<string, string>>;
+  /** Step id whose verification is scripted to fail during remediation. */
+  failingStep?: string;
 }
 
 export const INCIDENTS: readonly Incident[] = [
@@ -109,7 +152,7 @@ export const INCIDENTS: readonly Incident[] = [
       '02:14:31 JOB12871  IEF404I CBPOST40 - ENDED - TIME=02.14.31',
     ],
     fixtureNote:
-      'Mapped abend code. The table answers it, so no request is built and no model sees the spool.',
+      'Mapped abend code. The table answers it, so no request is built, no diagnostic runs and no model sees the spool.',
   },
   {
     id: 'INC-4472',
@@ -127,7 +170,7 @@ export const INCIDENTS: readonly Incident[] = [
       '02:16:10 SCHED     CA7-3022 REQUIREMENT OUTSTANDING: CBPOST40 COND CODE',
     ],
     fixtureNote:
-      'Dependency state answers it. Opening a second investigation here splits the bridge across one failure.',
+      'Dependency state answers it. Opening a second investigation here splits the work across one failure.',
   },
   {
     id: 'INC-4473',
@@ -247,8 +290,21 @@ export const INCIDENTS: readonly Incident[] = [
     ],
     operatorNote: 'Scheme desk says nothing declared on their side. Please advise first check.',
     fixtureNote:
-      'Vendor message identifier absent from the mapping table. The candidate set is bounded by the affected CIs; discriminating among the remaining procedures is what is left.',
-    scripted: { runbook: 'RB-CARD-SCHEME-CUTOVER', strength: 0.86, evidenceSufficient: 0.81 },
+      'The concentrated case. The first judgement is peaked enough that no diagnostic earns its cost, so the loop skips probing entirely and remediates. Included so the example is not only about being uncertain.',
+    rounds: [
+      {
+        distribution: {
+          'RM-SCHEME-REARBITRATE': 0.89,
+          'RM-MQ-RESTART-CHANNEL': 0.05,
+          'RM-SPACE-EXTEND': 0.02,
+          'RM-LOADLIB-REPOINT': 0.02,
+          'RM-HSM-KEYSYNC': 0.01,
+          'none-of-these': 0.01,
+        },
+        evidenceSufficient: 0.84,
+        note: 'peaked on first answer; leader clears the decision threshold',
+      },
+    ],
   },
   {
     id: 'INC-4479',
@@ -274,8 +330,220 @@ export const INCIDENTS: readonly Incident[] = [
     operatorNote:
       'Three alerts inside a minute across posting, DB2 and MQ. Unclear whether this is one condition or three.',
     fixtureNote:
-      'Several low-level errors that may share one upstream cause. Scripted as a split distribution: the policy sends split mass to the ordinary queue instead of picking a side.',
-    scripted: { runbook: 'RB-FEED-LATE', strength: 0.37, evidenceSufficient: 0.44 },
+      'THE CASE THE EXAMPLE EXISTS FOR. The first judgement leads on the DB2 remediation. The cheapest diagnostic walks the scheduler graph and finds an upstream feed job that ended not-OK twenty-three minutes earlier and paged nobody. The re-judgement leads on the feed remediation instead. Probing changed the winner; it did not merely confirm it.',
+    rounds: [
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.36,
+          'RM-FEED-RESUPPLY': 0.27,
+          'RM-CTL-REBUILD': 0.14,
+          'RM-DATA-0C7': 0.1,
+          'RM-LOADLIB-REPOINT': 0.07,
+          'RM-SPACE-EXTEND': 0.04,
+          'none-of-these': 0.02,
+        },
+        evidenceSufficient: 0.41,
+        note: 'the -911 is the loudest line in the window, so the DB2 remediation leads',
+      },
+      {
+        distribution: {
+          'RM-FEED-RESUPPLY': 0.91,
+          'RM-DB2-RELIEVE-LOCK': 0.04,
+          'RM-CTL-REBUILD': 0.02,
+          'RM-DATA-0C7': 0.01,
+          'RM-LOADLIB-REPOINT': 0.01,
+          'RM-SPACE-EXTEND': 0.005,
+          'none-of-these': 0.005,
+        },
+        evidenceSufficient: 0.87,
+        note: 'upstream feed job found; the DB2 timeout reads as a consequence rather than a cause',
+      },
+    ],
+  },
+  {
+    id: 'INC-4484',
+    raisedAt: '2026-09-22T03:41:07Z',
+    flow: 'NIGHTLY-CORE',
+    job: 'CBSTMT35',
+    components: ['CBSTMT', 'DB2P01'],
+    scheduler: { state: 'ENDED_NOT_OK', slaAt: '2026-09-22T06:00Z' },
+    spool: [
+      '03:40:58 JOB13066  +CBS0900I ARCHIVE PASS STARTED FOR CYCLE 20260922',
+      '03:41:02 JOB13066  +CBS0931W SEGMENT 004 RETRY, REASON QUALIFIER 0x11',
+      '03:41:04 JOB13066  DSNT408I SQLCODE = -904, ERROR: UNSUCCESSFUL EXECUTION CAUSED BY AN UNAVAILABLE RESOURCE',
+      '03:41:05 JOB13066  +CBS0938W ARCHIVE SEGMENT INCOMPLETE, 62,004 OF 118,402 DOCUMENTS',
+      '03:41:07 JOB13066  IEF142I CBSTMT35 STEP050 - COND CODE 0008',
+    ],
+    operatorNote:
+      'Archive pass half finished. No abend, no control break, and the resource name in the -904 is not one we recognise.',
+    fixtureNote:
+      'The refusal case. Three diagnostics run, every one of them comes back negative, and the distribution never concentrates. Both budget dimensions are spent \u2014 three probes and all five cost units \u2014 so the run stops having changed nothing. This is a correct outcome, not a failure to reach one.',
+    rounds: [
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.31,
+          'RM-DATA-0C7': 0.28,
+          'RM-LOADLIB-REPOINT': 0.22,
+          'RM-SPACE-EXTEND': 0.16,
+          'none-of-these': 0.03,
+        },
+        evidenceSufficient: 0.38,
+      },
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.33,
+          'RM-DATA-0C7': 0.3,
+          'RM-LOADLIB-REPOINT': 0.21,
+          'RM-SPACE-EXTEND': 0.13,
+          'none-of-these': 0.03,
+        },
+        evidenceSufficient: 0.4,
+        note: 'nothing upstream failed, so the trouble starts here \u2014 which rules nothing out, because every remaining candidate is a way for this job to fail on its own',
+      },
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.4,
+          'RM-DATA-0C7': 0.37,
+          'RM-SPACE-EXTEND': 0.16,
+          'RM-LOADLIB-REPOINT': 0.04,
+          'none-of-these': 0.03,
+        },
+        evidenceSufficient: 0.44,
+        note: 'the concatenation matches the manifest, which removes one candidate and sharpens nothing else',
+      },
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.44,
+          'RM-DATA-0C7': 0.41,
+          'RM-SPACE-EXTEND': 0.05,
+          'RM-LOADLIB-REPOINT': 0.04,
+          'none-of-these': 0.06,
+        },
+        evidenceSufficient: 0.47,
+        note: 'space has headroom too; two candidates remain live and nothing inside the budget separates them',
+      },
+    ],
+    observations: {
+      'DG-LOADLIB-DIFF': 'concatenation-matches',
+      'DG-GDG-LIMIT': 'limit-headroom',
+      'DG-DB2-LOCKSNAP': 'no-contention',
+      'DG-ABEND-DUMP-TRACE': 'no-dump-available',
+    },
+  },
+  {
+    id: 'INC-4485',
+    raisedAt: '2026-09-22T03:44:51Z',
+    flow: 'NIGHTLY-CARDS',
+    job: 'CDCLR25',
+    components: ['CDCLR', 'MQ-CDCLR-CHL'],
+    scheduler: { state: 'ENDED_NOT_OK', slaAt: '2026-09-22T05:00Z' },
+    spool: [
+      '03:44:44 JOB13078  +CDC0680I AUTHORISATION REPLAY STARTED, 9,204 ITEMS',
+      '03:44:47 JOB13078  AMQ9513W MAXIMUM NUMBER OF CHANNELS REACHED ON CDCLR.TO.SCHEME',
+      '03:44:49 JOB13078  AMQ9999E CHANNEL CDCLR.TO.SCHEME ENDED ABNORMALLY',
+      '03:44:50 JOB13078  +CDC0688W REPLAY SUSPENDED, 2,610 ITEMS UNSENT',
+      '03:44:51 JOB13078  IEF142I CDCLR25 STEP010 - COND CODE 0008',
+    ],
+    fixtureNote:
+      'The rollback case. One cheap diagnostic concentrates the distribution, the remediation runs, and its second step fails verification. Both steps are reversible, so the runner undoes them in reverse order and reports rolled_back. Nothing here reaches a person.',
+    rounds: [
+      {
+        distribution: {
+          'RM-MQ-RESTART-CHANNEL': 0.51,
+          'RM-SCHEME-REARBITRATE': 0.31,
+          'RM-SPACE-EXTEND': 0.08,
+          'RM-LOADLIB-REPOINT': 0.05,
+          'RM-HSM-KEYSYNC': 0.03,
+          'none-of-these': 0.02,
+        },
+        evidenceSufficient: 0.52,
+      },
+      {
+        distribution: {
+          'RM-MQ-RESTART-CHANNEL': 0.92,
+          'RM-SCHEME-REARBITRATE': 0.04,
+          'RM-SPACE-EXTEND': 0.015,
+          'RM-LOADLIB-REPOINT': 0.01,
+          'RM-HSM-KEYSYNC': 0.01,
+          'none-of-these': 0.005,
+        },
+        evidenceSufficient: 0.9,
+        note: 'channel confirmed retrying, which is consistent with exactly one remediation',
+      },
+    ],
+    observations: {
+      'DG-MQ-CHANSTAT': 'channel-retrying',
+      'DG-SCHEME-ARBLOG': 'peer-token-current',
+      'DG-HSM-KCV': 'kcv-matches',
+    },
+    failingStep: 'restart-channel',
+  },
+  {
+    id: 'INC-4486',
+    raisedAt: '2026-09-22T03:52:30Z',
+    flow: 'NIGHTLY-GL',
+    job: 'GLEXTR50',
+    components: ['GLEXTR', 'CBPOST'],
+    scheduler: { state: 'ENDED_NOT_OK', slaAt: '2026-09-22T06:30Z' },
+    spool: [
+      '03:52:20 JOB13084  +GLX0860I JOURNAL MERGE PASS STARTED',
+      '03:52:24 JOB13084  DSNT408I SQLCODE = -911, ERROR: THE CURRENT UNIT OF WORK HAS BEEN ROLLED BACK',
+      '03:52:26 JOB13084  +GLX0871W PACKED FIELD SUSPECT AT OFFSET 0x1C4 IN JOURNAL RECORD 44,102',
+      '03:52:28 JOB13084  +GLX0879W MERGE ABANDONED AFTER 44,102 OF 902,118 RECORDS',
+      '03:52:30 JOB13084  IEF142I GLEXTR50 STEP030 - COND CODE 0008',
+    ],
+    operatorNote:
+      'Either a lock timeout or a bad packed field. The two readings suggest very different remediations.',
+    fixtureNote:
+      'The cost-efficiency case. The distribution is split almost evenly between a lock timeout and a bad packed field. The sharpest available diagnostic is the lock snapshot, which carries the highest raw expected gain of anything affordable — and it is not chosen first, because the dependency walk costs a third as much and would, if it found an upstream failure, remove both candidates at once. It does not find one. The expensive discriminator is then worth its price, and goes second. The ranked table prints raw gain and gain-per-cost side by side so the divergence is visible rather than asserted.',
+    rounds: [
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.44,
+          'RM-DATA-0C7': 0.41,
+          'RM-CTL-REBUILD': 0.06,
+          'RM-LOADLIB-REPOINT': 0.05,
+          'RM-FEED-RESUPPLY': 0.02,
+          'RM-SPACE-EXTEND': 0.01,
+          'none-of-these': 0.01,
+        },
+        evidenceSufficient: 0.45,
+      },
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.45,
+          'RM-DATA-0C7': 0.42,
+          'RM-LOADLIB-REPOINT': 0.07,
+          'RM-SPACE-EXTEND': 0.02,
+          'RM-CTL-REBUILD': 0.02,
+          'RM-FEED-RESUPPLY': 0.01,
+          'none-of-these': 0.01,
+        },
+        evidenceSufficient: 0.48,
+        note: 'nothing upstream failed, so this job is where the trouble starts \u2014 which removes the upstream remediations and leaves the original two exactly as contested as before',
+      },
+      {
+        distribution: {
+          'RM-DB2-RELIEVE-LOCK': 0.9,
+          'RM-DATA-0C7': 0.05,
+          'RM-CTL-REBUILD': 0.02,
+          'RM-LOADLIB-REPOINT': 0.015,
+          'RM-FEED-RESUPPLY': 0.005,
+          'RM-SPACE-EXTEND': 0.005,
+          'none-of-these': 0.005,
+        },
+        evidenceSufficient: 0.88,
+        note: 'a blocking thread is present, which the packed-field reading does not predict',
+      },
+    ],
+    observations: {
+      'DG-DB2-LOCKSNAP': 'blocking-thread-present',
+      'DG-ABEND-DUMP-TRACE': 'offset-in-decimal-field',
+      'DG-CTL-TOTALS': 'totals-balance',
+      'DG-LOADLIB-DIFF': 'concatenation-matches',
+      'DG-GDG-LIMIT': 'limit-headroom',
+      'DG-FEED-TRAILER': 'trailer-matches',
+    },
   },
   {
     id: 'INC-4480',
@@ -294,8 +562,21 @@ export const INCIDENTS: readonly Incident[] = [
     operatorNote:
       'Security desk believes the HSM is fine; market data thinks the rate file never landed. CMDB shows two owners for the feed.',
     fixtureNote:
-      'Scripted CONFIDENTLY WRONG on purpose: high mass on a key-management procedure whose preconditions do not hold in authoritative state. The refusal has to come from application code, because no threshold on a peaked distribution will produce one.',
-    scripted: { runbook: 'RB-HSM-KEYROT', strength: 0.91, evidenceSufficient: 0.88 },
+      'Scripted CONFIDENTLY WRONG on purpose: high mass on a key-management remediation whose preconditions do not hold in authoritative state. The refusal has to come from application code, because no threshold on a peaked distribution will produce one — and note that the peak also suppresses probing, so the confident error is not caught by the information-gain machinery either.',
+    rounds: [
+      {
+        distribution: {
+          'RM-HSM-KEYSYNC': 0.91,
+          'RM-FEED-RESUPPLY': 0.04,
+          'RM-SCHEME-REARBITRATE': 0.02,
+          'RM-MQ-RESTART-CHANNEL': 0.01,
+          'RM-SPACE-EXTEND': 0.01,
+          'RM-LOADLIB-REPOINT': 0.005,
+          'none-of-these': 0.005,
+        },
+        evidenceSufficient: 0.88,
+      },
+    ],
   },
   {
     id: 'INC-4481',
@@ -310,7 +591,7 @@ export const INCIDENTS: readonly Incident[] = [
       '04:02:15 JOB13120  IEF142I GLEXTR40 STEP020 - COND CODE 0008',
     ],
     fixtureNote:
-      'Transport returns a structurally invalid answer. The SDK does not validate response shape, so the application must.',
+      'Transport returns a structurally invalid answer. The SDK does not validate response shape, so the application must — and a call that cannot answer produces a refusal, not a guess.',
     fault: 'malformed',
   },
   {
@@ -326,7 +607,7 @@ export const INCIDENTS: readonly Incident[] = [
       '04:19:03 JOB13188  IEF142I CDCLR40 STEP010 - COND CODE 0008',
     ],
     fixtureNote:
-      'The request times out. A decision point that cannot answer must not stall the batch bridge.',
+      'The request times out. A decision point that cannot answer must not stall the batch window and must not invent an action.',
     fault: 'timeout',
   },
   {
@@ -344,7 +625,18 @@ export const INCIDENTS: readonly Incident[] = [
     ],
     operatorNote: 'Statement composition problem. Nothing in the batch catalog looks like this.',
     fixtureNote:
-      'Document composition is outside the runbook catalog entirely. Scripted to answer none-of-these, which is the escape hatch that keeps the model from being forced into a near-miss.',
-    scripted: { runbook: 'none-of-these', strength: 0.74, evidenceSufficient: 0.69 },
+      'Document composition is outside the remediation catalog entirely. Scripted to answer none-of-these, which is categorical rather than uncertain: no diagnostic would move it, so no budget is spent before refusing.',
+    rounds: [
+      {
+        distribution: {
+          'none-of-these': 0.74,
+          'RM-LOADLIB-REPOINT': 0.11,
+          'RM-DATA-0C7': 0.07,
+          'RM-DB2-RELIEVE-LOCK': 0.05,
+          'RM-SPACE-EXTEND': 0.03,
+        },
+        evidenceSufficient: 0.69,
+      },
+    ],
   },
 ];

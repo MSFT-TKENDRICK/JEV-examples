@@ -123,6 +123,21 @@ export interface FailureOutcome {
 }
 
 /**
+ * One probe that was on the table at a given step, with the numbers it was
+ * ranked on.
+ *
+ * Recorded so that the *orderings not taken* survive the run. Probe economy —
+ * did information-gain selection beat naive cheapest-first? — is a question
+ * about alternatives, and a record holding only the probe that ran makes it
+ * permanently unanswerable without re-running the example.
+ */
+export interface ConsideredProbe {
+  probeId: string;
+  expectedInformationGain: number;
+  costUnits: number;
+}
+
+/**
  * One disambiguation step: the system was torn, worked out what would settle
  * it, went and checked, and updated.
  *
@@ -141,6 +156,15 @@ export interface ProbeRecord {
   /** Entropy after the update, so a probe that did not help is visible. */
   posteriorEntropy: number;
   costUnits: number;
+  /**
+   * Every probe assessed at this step, including the one chosen, **as ranked
+   * before the observation came back**.
+   *
+   * Optional, and absent means *unmeasured* rather than *passed*: a consumer
+   * that cannot see the alternatives must report probe economy as unknown, not
+   * as a win.
+   */
+  considered?: readonly ConsideredProbe[];
 }
 
 /** Outcome of an act-verify-compensate plan, when one was run. */
