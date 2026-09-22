@@ -14,18 +14,22 @@
  * | Principal cannot exceed entitlements | `permits` | no |
  * | Arguments must resolve to records | `bindArguments` | no |
  * | Narrative must be the customer's words | `resolveSpan` | no |
- * | Consequential actions need approval | `STEPS[].consequential` | no |
- * | Approval is bound to one frozen proposal | `digestOf` | no |
- * | State cannot go stale under an approval | `revalidate` | no |
+ * | The one irreversible step runs last | `validatePlan` | no |
+ * | A reversible step must carry an undo | `validatePlan` | no |
+ * | A plan is bound to one frozen proposal | `planDigest` | no |
+ * | State cannot go stale under a plan | `preflight` | no |
+ * | Failed verification unwinds in reverse | `runPlan` | no |
  *
  * Remove Jev and this arm still runs, still refuses the same things, and still
- * requires the same approvals. What Jev contributes is **which eligible step to
- * put in front of the human first**, and a distribution shape that the policy
- * can abstain on when the case is genuinely unclear. This baseline has no way to
- * abstain: it always has an answer, because static priority always has an answer.
+ * unwinds the same failures. What Jev contributes is **a distribution**: which
+ * eligible step leads, by how much, and — when that lead is too thin to act on —
+ * a shape with enough entropy in it for `selectProbe` to choose which read would
+ * reduce it most. This baseline has neither half. It cannot abstain, because
+ * static priority always has an answer, and it cannot probe, because it has no
+ * uncertainty to point a probe at.
  *
- * Whether preselection is worth anything — fewer clarification turns, less
- * handling time, better first-choice accuracy — is **not measured here**, and
+ * Whether preselection is worth anything — fewer wasted reads, less handling
+ * time, better first-choice accuracy — is **not measured here**, and
  * this repository ships no evidence for it. A static priority order is a
  * genuinely strong baseline for a workflow this small, and it may well be the
  * right answer; `docs/FSI-BOUNDARIES.md` question 9 asks exactly that.
@@ -38,7 +42,7 @@ import type { Eligibility, StepId, StepSpec } from '../../../src/workflow-machin
  *
  * Stopping the bleeding outranks paperwork; closing a case outranks nothing.
  * This ordering is a product decision written down as a list, which is both its
- * weakness (it cannot read the case) and its strength (it is reviewable, stable,
+ * weakness (it cannot read the case) and its strength (it is stable, auditable,
  * and cannot be moved by the wording of a customer's message).
  */
 export const BASELINE_PRIORITY: readonly StepId[] = [
