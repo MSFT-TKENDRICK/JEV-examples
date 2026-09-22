@@ -26,7 +26,7 @@ The difference is not that one arm is faster. It is that the arm which keeps the
 distribution can rank an alternative, backtrack to it, and price a probe, and the
 arm which keeps one answer can do none of those — expected information gain over
 a point mass is exactly zero for every probe. Read
-[what is and is not measured](#06-jev-vs-controlts--jev-against-a-control-model)
+[what is and is not measured](#06--the-same-maze-twice)
 before drawing conclusions from either arm.
 
 06 is a terminal program and records nothing. The recorded example is
@@ -113,7 +113,7 @@ Example 03 is built around that table.
 
 ### 01 — Quickstart: one request, five questions, and what the answer does next
 
-[`examples/01-quickstart.ts`](../../examples/01-quickstart.ts) — run with `npm run quickstart`.
+[`examples/01-quickstart.ts`](examples/01-quickstart.ts) — run with `npm run quickstart`.
 
 Two habits, in order of importance.
 
@@ -198,13 +198,13 @@ both rather than only the flattering one.
 The probe costs and the answer/department partitions are authored; the arithmetic over
 them is not. In both of these runs the probe that won on gain-per-cost also happened to
 be the cheaper one — which on its own would leave open whether the selector is really
-just sorting by price. [Example 02](02.md) shows the converse, picking a 1.6-cost
+just sorting by price. [Example 02](docs/fragments/02.md) shows the converse, picking a 1.6-cost
 sub-rubric over two 1.0-cost ones.
 
 #### Claims
 
 Everything runs offline against scripted fixtures in
-[`src/mock-fetch.ts`](../../src/mock-fetch.ts), which manufacture HTTP responses on the
+[`src/mock-fetch.ts`](src/mock-fetch.ts), which manufacture HTTP responses on the
 published SDK's real code path. No API key is needed and no network call is made.
 
 **This example may claim:** that the application's second question is a function of the
@@ -219,13 +219,13 @@ that the probe costs or the answer/department partitions are correct, since both
 authored too; that the sequence of probes is optimal, as selection is greedy
 one-step-lookahead; that the entropy drop says anything about calibration.
 
-See [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
+See [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md).
 
 <!-- fragment:02 -->
 
 ### 02 — Model-as-a-judge: when the judge is torn, it decomposes
 
-[`examples/02-judge-rubrics.ts`](../../examples/02-judge-rubrics.ts) — run with `npm run judge`.
+[`examples/02-judge-rubrics.ts`](examples/02-judge-rubrics.ts) — run with `npm run judge`.
 
 Five candidate answers to the same support question are scored against three weighted
 rubric dimensions and two hard safety gates. The part worth reading is what happens when
@@ -234,7 +234,7 @@ a verdict lands in the middle band.
 A flat distribution on "is this answer good?" usually means the question is too coarse.
 So the judge does not look for a person — it asks a **narrower question**. Each candidate
 sub-rubric is a probe with a cost and an observation→verdict partition, and
-[`selectProbe`](../../src/information-gain.ts) picks which one to spend a call on.
+[`selectProbe`](src/information-gain.ts) picks which one to spend a call on.
 
 #### Different weightings, different rankings
 
@@ -352,7 +352,7 @@ that a generative system cannot probe. One can be built to — just not from thi
 #### Claims
 
 Everything runs offline against scripted fixtures in
-[`src/mock-fetch.ts`](../../src/mock-fetch.ts), which manufacture HTTP responses on the
+[`src/mock-fetch.ts`](src/mock-fetch.ts), which manufacture HTTP responses on the
 published SDK's real code path. No API key is needed and no network call is made.
 
 **This example may claim:** that two weightings of the same measurements produce different
@@ -368,7 +368,7 @@ since those are authored too; that the probe sequence is optimal, as selection i
 one-step-lookahead; that entropy reduction indicates calibration; that judging without a
 human is safer than judging with one.
 
-See [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
+See [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md).
 
 <!-- fragment:03 -->
 
@@ -594,7 +594,7 @@ Two of the four executed nothing at all. None of the four asked a person.
 
 ### 04 — Browser use: pick an element, never invent one
 
-[`examples/04-browser-use.ts`](../../examples/04-browser-use.ts) — a long-horizon
+[`examples/04-browser-use.ts`](examples/04-browser-use.ts) — a long-horizon
 navigation task across a fourteen-page synthetic account portal, where the
 candidate set on every page is the page's own elements and uncertainty selects
 the next *machine* action rather than a person.
@@ -605,7 +605,7 @@ node examples/04-browser-use.ts
 
 **This is a scripted offline fixture.** No live TypeSafe API call is made. Every
 distribution is predetermined in the example's script and replayed through
-[`src/mock-fetch.ts`](../../src/mock-fetch.ts), so the real SDK code path runs
+[`src/mock-fetch.ts`](src/mock-fetch.ts), so the real SDK code path runs
 against manufactured HTTP responses. The site, the confusable labels, the probe
 costs and the depth of the trap were all authored here — which means the
 difficulty was authored too. The run demonstrates what the application does with
@@ -625,7 +625,7 @@ terminally, having changed nothing.
 is calibrated for element selection, that the probabilities are meaningful
 estimates of anything, that a maze authored to be hard is evidence the model found
 it hard, or that beam search plus EIG makes an agent safe. The binding list is
-[`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
+[`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md).
 
 #### Uncertainty selects an action, not a person
 
@@ -634,7 +634,7 @@ handoff:
 
 1. **Probe** — a read-only peek at evidence already in the page (a breadcrumb, a
    badge count, a disabled state, a footer legend), selected by
-   [`selectProbe`](../../src/information-gain.ts), then re-judge.
+   [`selectProbe`](src/information-gain.ts), then re-judge.
 2. **Act reversibly** — click something verifiable and undoable, then verify.
 3. **Refuse** — stop, state why, change nothing. Terminal.
 
@@ -660,7 +660,7 @@ wrong, and it takes three pages to prove it:
 throw away at the branch point.** "Billing history" carried 0.13 on the landing
 page. An interface that returns one answer never produced that number, so there is
 nothing to return to: the beam is one wide, and the first dead end is the last
-page. [`src/frontier.ts`](../../src/frontier.ts) is a probability-weighted beam
+page. [`src/frontier.ts`](src/frontier.ts) is a probability-weighted beam
 search precisely because the beam has to be weighted by *something*.
 
 The run ends:
@@ -696,7 +696,7 @@ work, not decoration.
 #### Scenario C — the refusal
 
 A third account renders none of the metadata the peeks read, so every observation
-comes back `unknown` and [`posterior`](../../src/information-gain.ts) falls back
+comes back `unknown` and [`posterior`](src/information-gain.ts) falls back
 to the prior:
 
 ```
@@ -711,7 +711,7 @@ Terminal. Not a queue, not an approval, not a person.
 #### The irreversible step
 
 The re-issue form is submitted through
-[`src/compensate.ts`](../../src/compensate.ts), which rejects any plan whose
+[`src/compensate.ts`](src/compensate.ts), which rejects any plan whose
 irreversible step is not last before anything runs:
 
 ```
@@ -731,7 +731,7 @@ this charge" is never a candidate for a click.
 
 ### 05 — The same loop, against a real browser
 
-[`examples/05-browser-live.ts`](../../examples/05-browser-live.ts) — the decision
+[`examples/05-browser-live.ts`](examples/05-browser-live.ts) — the decision
 loop from example 04, unchanged, driving real Chrome over CDP against the same
 fourteen-page site rendered to disk, recorded with
 [`webreel`](https://www.npmjs.com/package/webreel).
@@ -743,7 +743,7 @@ node examples/05-browser-live.ts --no-video  # drive the browser, skip the recor
 
 **The judgement is still a scripted offline fixture unless `TYPESAFE_API_KEY` is
 set.** With a key it makes live calls; without one it replays the same script
-example 04 uses, through [`src/mock-fetch.ts`](../../src/mock-fetch.ts). What is
+example 04 uses, through [`src/mock-fetch.ts`](src/mock-fetch.ts). What is
 real either way is the browser: real page loads from `examples/site`, the cursor
 moving to the element the policy chose, real typing into the re-issue form, and
 values read back out of the DOM to verify. The site was authored to be hard, so
@@ -752,7 +752,7 @@ evidence that the distribution deserves trust.
 
 #### What it may be read as showing
 
-That the loop in [`src/site/walk.ts`](../../src/site/walk.ts) is literally the
+That the loop in [`src/site/walk.ts`](src/site/walk.ts) is literally the
 same code offline and against a browser — the only difference is a `WalkDriver`;
 that the candidate set comes from the live DOM rather than from the fixture; that
 a backtrack is performed by returning to the entry page and re-clicking the path,
@@ -766,7 +766,7 @@ authored in this repository.
 #### The DOM is checked against the graph
 
 Every arrival compares the live element list and the filename against
-[`src/site/graph.ts`](../../src/site/graph.ts) and **throws on mismatch**, so the
+[`src/site/graph.ts`](src/site/graph.ts) and **throws on mismatch**, so the
 live example cannot silently degrade into the offline fixture:
 
 ```
@@ -802,7 +802,7 @@ recording and follows the element's own `href`.
 ```
 
 The peeks read evidence that is genuinely in the DOM — a `data-peek` index built
-by [`src/site/render.ts`](../../src/site/render.ts) over badges, `title`
+by [`src/site/render.ts`](src/site/render.ts) over badges, `title`
 breadcrumbs, `data-enabled` attributes and the footer legend. It is a convenience
 for reading them cheaply, not a capability claim.
 
@@ -844,7 +844,7 @@ at 60.
 
 ### 06 — The same maze, twice
 
-[`examples/06-jev-vs-control.ts`](../../examples/06-jev-vs-control.ts) — the same
+[`examples/06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) — the same
 fourteen-page maze, the same decision loop, the same judgements, walked twice:
 once by an arm that keeps the whole distribution, once by an arm that keeps one
 answer.
@@ -908,7 +908,7 @@ what the control arm lacked
 It recognised the dead end. It asked to back up. The capability it lacked is named
 exactly: a ranked alternative. A beam search needs a distribution to weight the
 beam, so with a point estimate `k = 1` always, and
-[`frontier.best()`](../../src/frontier.ts) returns `null` the first time the only
+[`frontier.best()`](src/frontier.ts) returns `null` the first time the only
 live path dies.
 
 #### Probe selection does not get harder — it gets worthless
@@ -951,7 +951,7 @@ the honest reading
 ```
 
 The binding list of permitted claims is
-[`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
+[`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md).
 
 <!-- fragments:end -->
 
@@ -1212,7 +1212,7 @@ The full contract is `docs/CLAIM-CONTRACTS.md`; the limits of the pattern are
 
 ### 08 — Residual incident runbook routing, by expected information gain
 
-[`examples/fsi/08-runbook-routing/index.ts`](../../examples/fsi/08-runbook-routing/index.ts)
+[`examples/fsi/08-runbook-routing/index.ts`](examples/fsi/08-runbook-routing/index.ts)
 — an overnight mainframe batch window produces sixteen incidents. Deterministic
 sources answer most of them. What is left is put to Jev as a bounded choice over
 applicable **remediation** runbooks plus `none-of-these` — and when that answer
