@@ -14,6 +14,9 @@
     "browser": "node examples/04-browser-use.ts",
     "record": "node examples/05-browser-live.ts",
     "compare": "node examples/06-jev-vs-control.ts",
+    "fsi:07": "node examples/fsi/07-next-step/index.ts",
+    "fsi:08": "node examples/fsi/08-runbook-routing/index.ts",
+    "fsi:eval": "node examples/fsi/eval/index.ts",
     "all": "node examples/01-quickstart.ts && node examples/02-judge-rubrics.ts && node examples/03-agent-harness.ts && node examples/04-browser-use.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
