@@ -15,22 +15,98 @@ not on the allowed list, it does not go in.
 
 ---
 
+## Architecture contract — applies to every example
+
+This section supersedes anything below it that disagrees. It was written after a
+review found that every example resolved uncertainty by handing the decision to a
+person, which demonstrates a model that defers rather than one that is useful.
+
+### The rule
+
+**Uncertainty selects the next machine action. It never selects a person.**
+
+No example may route a decision to a human reviewer, approver, operations queue,
+ticket, or escalation path as its answer to an ambiguous distribution. When the
+distribution is flat, the application must do one of exactly three things:
+
+1. **Probe** — run a read-only action chosen to maximise expected information
+   gain, observe the result, re-judge.
+2. **Act reversibly** — take an action it can verify and undo, then verify.
+3. **Refuse** — stop, with a stated reason, having changed nothing.
+
+"Refuse" is a terminal state of the program, not a handoff. It does not create a
+review item and does not assume anyone is watching.
+
+### May claim
+
+- Given a distribution over candidates and a set of read-only probes, the
+  application selects the probe with the highest expected reduction in entropy,
+  and this selection is computed, not scripted.
+- The probe ranking, the observation, and the posterior are recorded, so the
+  chain from uncertainty to action is inspectable after the fact.
+- A point estimate makes every probe's expected information gain **exactly
+  zero**, because a distribution with all mass on one candidate has zero entropy
+  and its posterior under any observation is unchanged. This is arithmetic, and
+  `src/information-gain.check.ts` asserts it.
+- Therefore an argmax-only interface supplies no basis for choosing what to
+  investigate next. This is a claim about what information a single answer
+  carries, and it holds regardless of which model produced the answer.
+- Irreversible steps run last, after reversible ones have been verified, and the
+  runner rejects any plan that violates this.
+- A failed compensation is reported as `inconsistent` and is a loud failure, not
+  a resolved state.
+
+### Must not claim
+
+- That expected information gain makes the probe sequence optimal. It is greedy
+  and one-step-lookahead; a plan that looks two probes ahead can beat it.
+- That the probes are the right probes. Which probes exist, what they cost, and
+  how their observations partition the candidates are **authored by the fixture**.
+  The arithmetic over those inputs is real; the inputs are manufactured.
+- That autonomy is safer than human review, or that removing the approval gate
+  removed a risk. It removed a *demonstration choice*. Whether a given action
+  should require authorization is a question about that action, and this
+  repository does not answer it.
+- That the entropy drop across a run measures anything about Jev's calibration.
+  The prior was scripted, so the posterior is a consequence of the script.
+- That a generative model cannot probe. It can; the claim is narrower and is
+  about what a bare point estimate supplies, not about what a system built
+  around one can be made to do.
+
+### Design constraints this implies
+
+1. No example may import an approval, review, or escalation module. The vocabulary
+   is banned from routes and outcomes: `escalate`, `approval_required`,
+   `ops_queue`, `review`, `handoff`.
+2. Probes must be genuinely read-only and must be cheaper than the action they
+   inform, or the example is arguing for itself dishonestly.
+3. Every example must show at least one run where probing **changes** the answer,
+   and one where the budget is exhausted and the application refuses. An example
+   in which probing always confirms the leader has demonstrated nothing.
+4. The comparison arm must fail *attributably* — the narration must name the
+   capability it lacked, not merely report a worse score.
+
+---
+
 ## Example 07 — Bounded next-step recommendation
 
 ### May claim
 
 - Deterministic code constructs the eligible option set **before** the Jev request.
 - Ineligible actions are never supplied as Choice options.
-- The application applies an explicit abstention and escalation policy to the
-  returned distribution.
+- The application applies an explicit abstention policy to the returned
+  distribution, and resolves ambiguity by fetching further evidence rather than
+  by consulting a person.
 - Argument binding is step-specific and accepts only authoritative record
   identifiers or exact permitted source spans.
 - The fixture proves that an unbound merchant, amount or record identifier is
   rejected **by application code**. The fixture exercises one scripted proposal;
   the check itself does not consult which model produced it.
-- The harness requires approval for configured consequential actions.
-- Approval is a separate step from Jev's recommendation, bound to an immutable
-  proposal digest and revalidated against fresh state.
+- Consequential actions run through the act/verify/compensate runner, which
+  verifies each reversible step before proceeding and places the single
+  irreversible step last.
+- A step whose verification fails triggers compensation of the steps already
+  taken, in reverse order.
 - The ledger records Jev's recommendation and the executed action in separate
   fields, and derives whether they differ.
 - The offline run exercises the published SDK code path with manufactured HTTP
@@ -45,14 +121,15 @@ not on the allowed list, it does not go in.
 - Bounded options imply a correct or harmless choice.
 - The pattern safely automates card freezes or dispute filing.
 - The pattern reduces fraud loss, handling time, or clarification turns.
+- Reversibility plus verification makes an action safe to take without
+  authorization. It makes the action **undoable**, which is a different and
+  smaller property.
 - The example demonstrates live TypeSafe API behaviour, latency, cost or
   reliability.
 - The generative control arm represents all Vercel AI SDK or tool-calling
   implementations. *(A competent generative implementation can also be constrained
   to enumerated IDs and subjected to the same referential checks. The control arm
   is a fixture, not a fair benchmark, and must say so.)*
-- Human confirmation by itself satisfies any regulatory, authorization or
-  operational requirement.
 
 ### Design constraints this contract implies
 
@@ -62,8 +139,9 @@ not on the allowed list, it does not go in.
 2. Bind arguments in a **subsequent, step-specific stage**. Independently selected
    marginals — tool, card, transaction — do not compose into a coherent joint
    decision, and candidate arguments are conditional on the selected step.
-3. Name the **authorization principal** for every approval. Customer, agent and
-   operations reviewer are not interchangeable.
+3. Name the **principal and the reversal path** for every consequential action.
+   An action the application cannot undo must be the last thing it does, and the
+   narration must say what would remain if it failed.
 4. Route genuinely authored content away from Jev: callback times come from the
    scheduler's availability, the dispute narrative preserves the customer's exact
    text, free notes are stored as untrusted customer input.
@@ -77,16 +155,24 @@ not on the allowed list, it does not go in.
 - Known structured mappings and dependency conditions are resolved
   deterministically first.
 - Jev receives only a controlled catalog of candidate runbooks plus `none`.
-- The application routes ambiguous or split distributions to the ordinary
-  operations queue.
+- When the distribution over **remediation** runbooks is ambiguous, the
+  application selects a **diagnostic** runbook to run — read-only, cheaper than
+  remediating, and chosen by expected information gain over the remaining
+  candidates.
+- The observation from a diagnostic run is fed back as evidence and the judgement
+  is repeated, with the entropy before and after both recorded.
+- The application remediates autonomously once the distribution concentrates, and
+  refuses — changing nothing — when the probe budget is exhausted without
+  concentration.
 - The safe fallback does not depend on Jev returning a correct answer.
 - Log preprocessing extracts bounded diagnostic windows and deterministically
   redacts **the configured** fields, before anything is sent. Redaction over
   unstructured vendor log text is best-effort: content matching no configured
   pattern survives into the request.
-- Scripted fixtures exercise confident, ambiguous, malformed-response, timeout and
-  fallback paths.
-- The ledger distinguishes the recommendation from the route actually taken.
+- Scripted fixtures exercise confident, ambiguous, probe-resolved,
+  budget-exhausted, malformed-response and timeout paths.
+- The ledger distinguishes the recommendation from the route actually taken, and
+  retains the full probe trail.
 - The example demonstrates bounded residual routing control flow.
 
 ### Must not claim
@@ -95,6 +181,10 @@ not on the allowed list, it does not go in.
 - Jev correctly understands abend codes or spool output.
 - Jev selects the correct owner or runbook.
 - The returned probabilities are calibrated.
+- The diagnostic runbooks are the ones a real site reliability team would run, or
+  that their costs reflect real execution times. Both are authored.
+- That fewer probes than a naive baseline means fewer probes against a real
+  incident population. It means fewer probes against **these fixtures**.
 - The pattern reduces MTTR, paging volume or misrouting.
 - The CMDB or runbook catalog is complete or current.
 - Recent deployments are causally responsible for the failure.
@@ -109,7 +199,9 @@ not on the allowed list, it does not go in.
    answers.
 2. Choose the **first diagnostic runbook**, not the owning team. Ownership belongs
    in metadata; choosing among several applicable diagnostic procedures can remain
-   genuinely semantic.
+   genuinely semantic — and it is a choice a distribution is directly useful for,
+   because the value of a diagnostic is defined by how much it would move the
+   distribution.
 3. A raw log tail is not a state-construction strategy. It may omit the causal
    event entirely while preserving only cleanup noise, and it may carry account
    data, tokens, dataset names or internal hostnames.
@@ -126,6 +218,11 @@ not on the allowed list, it does not go in.
 - The schema captures the specified application-visible inputs, distributions,
   policy values, routes and outcomes.
 - It distinguishes the service's recommendation from the harness's action.
+- It retains the probe trail — probe id, expected gain, prior and posterior
+  entropy, observation and cost — so the investigation sequence can be replayed
+  and second-guessed.
+- It records execution outcomes including rollback and `inconsistent`, so a run
+  that left partial effects behind is visible rather than reported as handled.
 - It labels scripted and live modes separately.
 - It can support replay, debugging and comparison, and may support later
   governance work if records are complete and protected.
@@ -154,8 +251,11 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
 
 - The offline sweep measures **how the policy behaves** across the fixture
   population as thresholds move.
-- It reports, per threshold, the number of recorded decisions scored, accepted
-  and escalated.
+- It reports, per threshold, the number of recorded decisions scored, acted on,
+  probed and refused.
+- It reports **probe economy**: how many probes the information-gain policy spent
+  to reach a decision versus a naive policy that runs the cheapest available
+  probe first. Both numbers are computed over the same fixtures.
 - It reports a **contradicted** count: decisions whose recorded metrics cleared
   their own recorded thresholds, but whose executed action diverged from the
   recommendation because deterministic code vetoed it. This is computed from
@@ -178,5 +278,8 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
   are scripted.**
 - That the contradicted count is a measured error rate. It is a count of two
   hand-written fixtures that were built to contain exactly that case.
+- That the probe-economy figure generalises. It compares two policies over
+  authored probe costs and authored partitions; change the fixture and the
+  ranking can change. It shows the mechanism works, not that it pays.
 - The perturbation results are known. **The live path has never been executed.**
   The repo ships the instrument, not the findings.

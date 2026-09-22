@@ -1,5 +1,7 @@
 /** Small console helpers so the examples read like reports, not log dumps. */
 
+import type { Verdict } from './rubric.ts';
+
 const supportsColor =
   process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
 
@@ -60,9 +62,9 @@ export function bars(
   }
 }
 
-export function verdictColor(verdict: 'pass' | 'review' | 'fail'): string {
+export function verdictColor(verdict: Verdict): string {
   if (verdict === 'pass') return green('PASS');
-  if (verdict === 'review') return yellow('REVIEW');
+  if (verdict === 'investigate') return yellow('INVESTIGATE');
   return red('FAIL');
 }
 
