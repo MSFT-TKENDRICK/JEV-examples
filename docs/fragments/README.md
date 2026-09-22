@@ -19,7 +19,9 @@ rather than adding one. The script is wired centrally at integration.
 ## Contract for a fragment
 
 - Start at heading level `###`, matching the existing per-example sections in
-  `README.md`.
+  `README.md`. Use `####` for subsections inside the fragment — a `##` anywhere
+  in a fragment would outrank the section it lives in and break the README's
+  outline. The assembler refuses a fragment that does not begin at `###`.
 - Open with a link to the example file and a one-line statement of what it shows.
 - Include the example's allowed-claims / must-not-claim summary, or link to
   [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
