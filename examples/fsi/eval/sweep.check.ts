@@ -79,7 +79,15 @@ function recordWith(probes: readonly ProbeRecord[]): DecisionRecord {
     { probeId: 'chosen', expectedInformationGain: 0.4, costUnits: 5 },
   ];
   const economy = probeEconomy([recordWith([probe(5, 0.4, only)])]);
-  check('a one-option set is unmeasured, because no choice existed', economy.unmeasured === 1);
+  check(
+    'a one-option set is not unmeasured — the trail recorded it',
+    economy.unmeasured === 0,
+  );
+  check(
+    'it is counted as a step that had no alternatives to choose between',
+    economy.noAlternatives === 1,
+  );
+  check('and it is still not measurable, because no choice existed', economy.measurable === 0);
 }
 
 // 3. When the cheapest probe is the one chosen, there is nothing to trade off.
@@ -140,6 +148,8 @@ function recordWith(probes: readonly ProbeRecord[]): DecisionRecord {
   ]);
   check('every probe in a trail is a step', economy.steps === 3);
   check('the bare probe is unmeasured', economy.unmeasured === 1);
+  check('and nothing is miscounted as having had one option', economy.noAlternatives === 0);
+  check('steps partition exactly', economy.measurable + economy.unmeasured + economy.noAlternatives === economy.steps);
   check('both real choices disagreed', economy.disagreements === 2);
   check(
     'cost multiplier is the mean of 2x and 4x',

@@ -86,8 +86,12 @@ async function main(): Promise<void> {
       if (economy.measurable === 0) {
         console.log(
           dim(
-            `    unmeasured — ${economy.steps} probe step(s), none recorded the\n` +
-              `    alternatives they were chosen from, so there is nothing to compare against`,
+            economy.unmeasured === economy.steps
+              ? `    unmeasured — ${economy.steps} probe step(s), none recorded the\n` +
+                  `    alternatives they were chosen from, so there is nothing to compare against`
+              : `    no comparison to make — of ${economy.steps} probe step(s), ` +
+                  `${economy.noAlternatives} had\n    only one probe available and ` +
+                  `${economy.unmeasured} did not record the alternatives`,
           ),
         );
       } else {
@@ -114,8 +118,21 @@ async function main(): Promise<void> {
             ),
           );
         }
+        if (economy.noAlternatives > 0) {
+          console.log(
+            dim(
+              `    ${economy.noAlternatives} step(s) had one probe available and so no ` +
+                `choice to make`,
+            ),
+          );
+        }
         if (economy.unmeasured > 0) {
-          console.log(dim(`    ${economy.unmeasured} step(s) unmeasured`));
+          console.log(
+            dim(
+              `    ${economy.unmeasured} step(s) unmeasured — the alternatives were not ` +
+                `recorded`,
+            ),
+          );
         }
         if (economy.rankingViolations > 0) {
           console.log(

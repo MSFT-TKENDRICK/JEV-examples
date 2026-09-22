@@ -227,10 +227,23 @@ export interface ProbeEconomy {
   /** Steps whose option set had more than one probe, so a choice existed. */
   measurable: number;
   /**
-   * Steps that could not be assessed: `considered` absent, or only one probe
-   * available. Reported rather than dropped, so the denominator stays honest.
+   * Steps that recorded no option set at all — `considered` absent or empty.
+   *
+   * Genuinely unknown: the alternatives existed at run time and were not
+   * written down, so the comparison cannot be made from this trail at all.
+   * Reported rather than dropped, so the denominator stays honest, and never
+   * counted as a pass.
    */
   unmeasured: number;
+  /**
+   * Steps that recorded exactly one option, so no choice existed.
+   *
+   * This is a *measured* fact and must not be folded into `unmeasured`. The
+   * trail is complete here; it simply shows the selector had nothing to choose
+   * between. Calling that unmeasured would send a reader looking for a missing
+   * record that was in fact written.
+   */
+  noAlternatives: number;
   /** Measurable steps where cheapest-first would have run a different probe. */
   disagreements: number;
   /**
@@ -274,6 +287,7 @@ function mean(values: readonly number[]): number | null {
 export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
   let steps = 0;
   let unmeasured = 0;
+  let noAlternatives = 0;
   let disagreements = 0;
   let rankingViolations = 0;
   const costMultipliers: number[] = [];
@@ -284,9 +298,14 @@ export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
       steps += 1;
       const options = probe.considered ?? [];
 
-      // One option is not a choice, and no options is no record of one.
-      if (options.length < 2) {
+      // No record of the option set is unknown. A recorded set of one is known,
+      // and says there was nothing to choose between. Different facts.
+      if (options.length === 0) {
         unmeasured += 1;
+        continue;
+      }
+      if (options.length === 1) {
+        noAlternatives += 1;
         continue;
       }
 
@@ -315,8 +334,9 @@ export function probeEconomy(records: readonly DecisionRecord[]): ProbeEconomy {
 
   return {
     steps,
-    measurable: steps - unmeasured,
+    measurable: steps - unmeasured - noAlternatives,
     unmeasured,
+    noAlternatives,
     disagreements,
     meanCostMultiplier: mean(costMultipliers),
     meanGainMultiplier: mean(gainMultipliers),
