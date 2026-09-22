@@ -11,7 +11,7 @@
 
 import { createLedger, metricsFor, stateReference } from '../../../src/ledger.ts';
 import type { ConsideredProbe, DecisionRecord, ProbeRecord } from '../../../src/ledger.ts';
-import { probeEconomy, resolution } from './sweep.ts';
+import { deterministicallyContradicted, probeEconomy, resolution } from './sweep.ts';
 
 let failures = 0;
 let total = 0;
@@ -213,6 +213,72 @@ function recordWith(probes: readonly ProbeRecord[]): DecisionRecord {
   check('probing then refusing is counted as refused', summary.refusedAfterProbing === 1);
   check('inconsistent is surfaced, not folded into refused', summary.inconsistent === 1);
   check('probe costs sum across records', summary.probeCost === 6, `${summary.probeCost}`);
+}
+
+// 9. BLOCKING: an efficiency that could not be computed is not a clean result.
+// A zero-cost probe makes gain-per-cost undefined. Folding that into
+// `rankingViolations === 0` would report "measured, none found" for a
+// comparison that never happened — unknown scored as benign, which a
+// denominator cannot catch because every count would still be real.
+{
+  const freeCheapest: ConsideredProbe[] = [
+    { probeId: 'chosen', expectedInformationGain: 0.3, costUnits: 6 },
+    { probeId: 'cheap', expectedInformationGain: 0.2, costUnits: 0 },
+  ];
+  const economy = probeEconomy([recordWith([probe(6, 0.3, freeCheapest)])]);
+  check(
+    'an uncomputable efficiency is counted, not skipped',
+    economy.efficiencyUnmeasured === 1,
+    `${economy.efficiencyUnmeasured}`,
+  );
+  check('and is not reported as a ranking violation either way', economy.rankingViolations === 0);
+  check('the step is still counted as a disagreement', economy.disagreements === 1);
+}
+
+// 10. BLOCKING: a missing threshold key must refuse, not default.
+// Defaulting to a permissive value would make the gate trivially passable and
+// fabricate a contradiction. The denominator is fine here — every count real,
+// every count meaningless — so refusal is the only honest resolution.
+{
+  const ledger = createLedger({ component: 'sweep-check', mode: 'SCRIPTED_MOCK' });
+  const common = {
+    candidates: { source: 's', version: 'v', optionIds: [...OPTIONS], readAt: 'now' },
+    // Deliberately sharp: this record must clear its own gate, so that what the
+    // assertion demonstrates is the threshold read, not an entropy failure.
+    metrics: metricsFor({ x: 0.95, y: 0.05 }, 'x', OPTIONS),
+    recommendation: { question: 'q', choice: 'x' },
+    probes: [],
+    executed: { action: 'y', divergedFromRecommendation: true },
+    latencyMs: 1,
+  };
+
+  const withoutThresholds = ledger.record({
+    ...common,
+    state: stateReference({ case: 4 }),
+    policy: { policyVersion: 'p', thresholds: {}, route: 'act', reason: 'r' },
+  });
+  let refused = false;
+  try {
+    deterministicallyContradicted(withoutThresholds);
+  } catch {
+    refused = true;
+  }
+  check('a record with no recorded thresholds refuses rather than defaults', refused);
+
+  const withThresholds = ledger.record({
+    ...common,
+    state: stateReference({ case: 5 }),
+    policy: {
+      policyVersion: 'p',
+      thresholds: { minSelectedProbability: 0.7, minMargin: 0.25, maxNormalizedEntropy: 0.6 },
+      route: 'act',
+      reason: 'r',
+    },
+  });
+  check(
+    'a record carrying its thresholds is still scored',
+    deterministicallyContradicted(withThresholds),
+  );
 }
 
 console.log(
