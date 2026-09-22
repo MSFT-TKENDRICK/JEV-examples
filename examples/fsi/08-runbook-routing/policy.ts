@@ -41,6 +41,14 @@ export const THRESHOLDS = {
   minEvidenceSufficient: 0.6,
 } as const;
 
+/** The tunable part of the policy, so a sweep can vary it without copying the tests. */
+export type Thresholds = {
+  minSelectedProbability: number;
+  minMargin: number;
+  maxNormalizedEntropy: number;
+  minEvidenceSufficient: number;
+};
+
 export interface PolicyInput {
   choice: string;
   metrics: DistributionMetrics;
@@ -66,7 +74,7 @@ export interface PolicyDecision {
  * here whose input is authoritative state rather than a model output. A demo
  * where the model is always right never exercises it.
  */
-export function decide(input: PolicyInput): PolicyDecision {
+export function decide(input: PolicyInput, thresholds: Thresholds = THRESHOLDS): PolicyDecision {
   const { choice, metrics, evidenceSufficient, isNoneOption, precondition } = input;
 
   if (isNoneOption) {
@@ -78,22 +86,22 @@ export function decide(input: PolicyInput): PolicyDecision {
   }
 
   const failed: string[] = [];
-  if (metrics.selectedProbability < THRESHOLDS.minSelectedProbability) {
+  if (metrics.selectedProbability < thresholds.minSelectedProbability) {
     failed.push(
-      `selected probability ${metrics.selectedProbability.toFixed(2)} < ${THRESHOLDS.minSelectedProbability}`,
+      `selected probability ${metrics.selectedProbability.toFixed(2)} < ${thresholds.minSelectedProbability}`,
     );
   }
-  if (metrics.margin < THRESHOLDS.minMargin) {
-    failed.push(`margin ${metrics.margin.toFixed(2)} < ${THRESHOLDS.minMargin}`);
+  if (metrics.margin < thresholds.minMargin) {
+    failed.push(`margin ${metrics.margin.toFixed(2)} < ${thresholds.minMargin}`);
   }
-  if (metrics.normalizedEntropy > THRESHOLDS.maxNormalizedEntropy) {
+  if (metrics.normalizedEntropy > thresholds.maxNormalizedEntropy) {
     failed.push(
-      `normalized entropy ${metrics.normalizedEntropy.toFixed(2)} > ${THRESHOLDS.maxNormalizedEntropy}`,
+      `normalized entropy ${metrics.normalizedEntropy.toFixed(2)} > ${thresholds.maxNormalizedEntropy}`,
     );
   }
-  if (evidenceSufficient < THRESHOLDS.minEvidenceSufficient) {
+  if (evidenceSufficient < thresholds.minEvidenceSufficient) {
     failed.push(
-      `evidence sufficiency ${evidenceSufficient.toFixed(2)} < ${THRESHOLDS.minEvidenceSufficient}`,
+      `evidence sufficiency ${evidenceSufficient.toFixed(2)} < ${thresholds.minEvidenceSufficient}`,
     );
   }
   if (!precondition.holds) {

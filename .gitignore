@@ -9,3 +9,6 @@ __pycache__/
 # Per-arm recordings from example 06; only the stitched result is committed.
 docs/media/compare-*.mp4
 .impeccable/
+
+# Decision ledgers written by the FSI examples when JEV_LEDGER_FILE is set.
+*.jsonl

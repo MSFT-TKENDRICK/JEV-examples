@@ -43,6 +43,13 @@ export const THRESHOLDS = {
 } as const;
 
 /** Where a decision went. Mirrors the routes the ledger expects. */
+/** The tunable part of the policy, so a sweep can vary it without copying the tests. */
+export type Thresholds = {
+  minSelectedProbability: number;
+  minMargin: number;
+  maxNormalizedEntropy: number;
+};
+
 export type Route = 'auto' | 'approval_required' | 'escalated' | 'refused';
 
 /** What the harness does when it will not act on the recommendation. */
@@ -73,7 +80,7 @@ export interface PolicyInput {
  * low-confidence one, and a low-confidence one must never be read as a refusal
  * to act — they route to different places and mean different things.
  */
-export function decide(input: PolicyInput): PolicyDecision {
+export function decide(input: PolicyInput, thresholds: Thresholds = THRESHOLDS): PolicyDecision {
   const { metrics, choice, step, failure } = input;
 
   // Fail closed. A timeout is not an opinion.
@@ -109,7 +116,7 @@ export function decide(input: PolicyInput): PolicyDecision {
     };
   }
 
-  const failed = failedTests(metrics);
+  const failed = failedTests(metrics, thresholds);
   if (failed.length > 0) {
     return {
       route: 'escalated',
@@ -134,20 +141,23 @@ export function decide(input: PolicyInput): PolicyDecision {
 }
 
 /** Which of the three tests a distribution failed, named individually. */
-export function failedTests(metrics: DistributionMetrics): string[] {
+export function failedTests(
+  metrics: DistributionMetrics,
+  thresholds: Thresholds = THRESHOLDS,
+): string[] {
   const failed: string[] = [];
-  if (metrics.selectedProbability < THRESHOLDS.minSelectedProbability) {
+  if (metrics.selectedProbability < thresholds.minSelectedProbability) {
     failed.push(
       `selected probability ${fmt(metrics.selectedProbability)} < ` +
-        `${fmt(THRESHOLDS.minSelectedProbability)}`,
+        `${fmt(thresholds.minSelectedProbability)}`,
     );
   }
-  if (metrics.margin < THRESHOLDS.minMargin) {
-    failed.push(`margin ${fmt(metrics.margin)} < ${fmt(THRESHOLDS.minMargin)}`);
+  if (metrics.margin < thresholds.minMargin) {
+    failed.push(`margin ${fmt(metrics.margin)} < ${fmt(thresholds.minMargin)}`);
   }
-  if (metrics.normalizedEntropy > THRESHOLDS.maxNormalizedEntropy) {
+  if (metrics.normalizedEntropy > thresholds.maxNormalizedEntropy) {
     failed.push(
-      `entropy ${fmt(metrics.normalizedEntropy)} > ${fmt(THRESHOLDS.maxNormalizedEntropy)}`,
+      `entropy ${fmt(metrics.normalizedEntropy)} > ${fmt(thresholds.maxNormalizedEntropy)}`,
     );
   }
   return failed;
