@@ -101,6 +101,7 @@ Example 03 is built around that table.
 
 ## The examples
 
+<!-- fragment:01 -->
 ### [`01-quickstart.ts`](examples/01-quickstart.ts) — one request, five questions
 
 Triages a support ticket: one Choice, two Scores, two Booleans, in a single
@@ -127,6 +128,7 @@ The point: **ask everything at once, then decide in code.** Extra questions are
 close to free, so ask the speculative ones too — you can ignore an answer, but
 you cannot go back in time for it.
 
+<!-- fragment:02 -->
 ### [`02-judge-rubrics.ts`](examples/02-judge-rubrics.ts) — model-as-a-judge with rubrics
 
 Scores three candidate responses against the same five-question rubric, then
@@ -159,6 +161,7 @@ Because the weights are ordinary numbers, changing what you value is a
 coefficient change and not a prompt rewrite — the same measurements produce
 both the `support-quality` and `brand-voice` rankings above.
 
+<!-- fragment:03 -->
 ### [`03-agent-harness.ts`](examples/03-agent-harness.ts) — Jev in a harness
 
 Two models, two jobs. The **Vercel AI SDK** (`generateObject` + `gateway`)
@@ -198,6 +201,7 @@ Note the two-request structure. Routing happens first, because the per-step
 questions are asked against a state that already includes the chosen model —
 questions in one request cannot consume each other's answers.
 
+<!-- fragment:04 -->
 ### [`04-browser-use.ts`](examples/04-browser-use.ts) — browser use
 
 The loop is `settle → describe → evaluate → act`. Your code enumerates the
@@ -245,6 +249,7 @@ TypeSafe browser example: [`Ying-Kai-Liao/jev-browser`](https://github.com/Ying-
 This example simulates a three-page site so it runs without Playwright. The
 `describe → evaluate → act` contract is what you would keep.
 
+<!-- fragment:05 -->
 ### [`05-browser-live.ts`](examples/05-browser-live.ts) — the same loop, against real Chrome
 
 Example 04's argument, with the simulation removed. Chrome launches, the
@@ -266,6 +271,7 @@ owns the cursor animation, the click overlay and the ffmpeg pipeline.
 first run — a few hundred MB — which is why 05 and 06 are excluded from
 `npm run all`.
 
+<!-- fragment:06 -->
 ### [`06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) — Jev against a control model
 
 The same task run twice through the same driver, recorded, and stitched
@@ -306,6 +312,8 @@ Read this before quoting the numbers.
 
 The behavioural difference does not depend on the stand-in at all: it follows
 from one arm returning a distribution and the other returning a single answer.
+
+<!-- fragments:end -->
 
 ### [`examples/python/`](examples/python) — LangChain
 
@@ -359,6 +367,7 @@ npm run fsi:08
 npm run fsi:eval
 ```
 
+<!-- fragment:07 -->
 ### 07 — Bounded next-step recommendation
 
 [`examples/fsi/07-next-step/index.ts`](../../examples/fsi/07-next-step/index.ts) —
@@ -531,6 +540,7 @@ state reference is not anonymization.
 
 ---
 
+<!-- fragment:08 -->
 ### 08 — Residual incident runbook routing
 
 [`examples/fsi/08-runbook-routing/index.ts`](../../examples/fsi/08-runbook-routing/index.ts)
@@ -727,6 +737,8 @@ visible; they are not empirically derived and are not valid across a different
 candidate-set size.
 
 ---
+
+<!-- fragments:end -->
 
 ### [`examples/fsi/eval/`](examples/fsi/eval) — what the thresholds are worth
 

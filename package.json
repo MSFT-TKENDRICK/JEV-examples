@@ -21,7 +21,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "check:foundation": "node src/ledger.check.ts && node src/information-gain.check.ts && node src/mock-fetch.check.ts && node src/compensate.check.ts",
     "check:eval": "node examples/fsi/eval/sweep.check.ts",
-    "check": "npm run check:foundation && npm run check:eval"
+    "check": "npm run check:foundation && npm run check:eval",
+    "readme": "node scripts/assemble-readme.ts",
+    "readme:check": "node scripts/assemble-readme.ts --check"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.14",
