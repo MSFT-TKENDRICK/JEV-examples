@@ -21,8 +21,10 @@ import { createFrontier, pathProbability } from './frontier.ts';
 import type { FrontierChild } from './frontier.ts';
 
 let failures = 0;
+let total = 0;
 
 function check(label: string, condition: boolean, detail?: string): void {
+  total++;
   if (condition) {
     console.log(`PASS  ${label}`);
   } else {
@@ -212,5 +214,5 @@ check(
 
 // -----------------------------------------------------------------------------
 
-console.log(failures === 0 ? '\nfrontier: all checks passed' : `\nfrontier: ${failures} FAILED`);
+console.log(failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`);
 if (failures > 0) process.exitCode = 1;
