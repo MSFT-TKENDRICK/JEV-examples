@@ -92,7 +92,30 @@ const noRec = ledger.record({ ...base, executed: { action: 'y' } });
 check('agreement derives false', agreed.executed.divergedFromRecommendation === false);
 check('divergence derives true', diverged.executed.divergedFromRecommendation === true);
 check('no recommendation is not divergence', noRec.executed.divergedFromRecommendation === false);
-check('optional fields default to null', agreed.metrics === null && agreed.override === null && agreed.failure === null);
+check(
+  'optional fields default to empty or null',
+  agreed.metrics === null && agreed.execution === null && agreed.failure === null,
+);
+check('the probe trail defaults to empty rather than null', Array.isArray(agreed.probes) && agreed.probes.length === 0);
+
+const probed = ledger.record({
+  ...base,
+  recommendation: { question: 'q', choice: 'x' },
+  executed: { action: 'x' },
+  probes: [
+    {
+      probeId: 'check-thing',
+      expectedInformationGain: 0.42,
+      priorEntropy: 0.69,
+      observation: 'absent',
+      posteriorEntropy: 0.11,
+      costUnits: 1,
+    },
+  ],
+  execution: { outcome: 'completed', reason: 'done', stepsAttempted: 2, stepsVerified: 2 },
+});
+check('a probe trail round-trips', probed.probes[0]?.probeId === 'check-thing');
+check('an execution outcome round-trips', probed.execution?.outcome === 'completed');
 
 // 6. JSONL round-trips, and entries() is not aliased.
 const jsonl = ledger.toJsonl();

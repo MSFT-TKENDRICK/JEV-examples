@@ -21,6 +21,7 @@ import type {
 /** Shorthand a script may return per question name. */
 export type ScriptedAnswer =
   | { choice: string; strength?: number }
+  | { distribution: Record<string, number> }
   | { score: number; strength?: number }
   | { noul: number };
 
@@ -98,22 +99,50 @@ function buildChoice(question: ChoiceQuestion, scripted: ScriptedAnswer | undefi
   const options = Object.keys(question.criteria);
   if (options.length === 0) throw new Error('Choice question has no options');
 
-  let targetIndex: number;
-  let strength: number;
+  let distribution: number[];
 
-  if (scripted && 'choice' in scripted) {
-    const index = options.indexOf(scripted.choice);
-    if (index === -1) {
-      throw new Error(`Mock script chose "${scripted.choice}", which is not an option`);
+  if (scripted && 'distribution' in scripted) {
+    // An explicit distribution, because `peaked()` decays by index distance and
+    // so cannot express "the model is torn between options 1 and 5 specifically".
+    // Confusable candidates that are not neighbours are the normal case in a
+    // real option set, and the probe-selection examples depend on being able to
+    // write one down.
+    const given = scripted.distribution;
+
+    for (const key of Object.keys(given)) {
+      if (!options.includes(key)) {
+        throw new Error(
+          `Mock script put mass on "${key}", which is not an option (have: ${options.join(', ')})`,
+        );
+      }
     }
-    targetIndex = index;
-    strength = scripted.strength ?? 0.88;
+
+    const raw = options.map((option) => Math.max(given[option] ?? 0, 0));
+    const total = raw.reduce((sum, value) => sum + value, 0);
+    if (total <= 0) {
+      throw new Error('Mock script supplied a distribution with no positive mass');
+    }
+
+    distribution = normalizeRounded(raw.map((value) => value / total));
   } else {
-    targetIndex = Math.floor(hash(seed) * options.length) % options.length;
-    strength = 0.45 + hash(`${seed}:strength`) * 0.5;
+    let targetIndex: number;
+    let strength: number;
+
+    if (scripted && 'choice' in scripted) {
+      const index = options.indexOf(scripted.choice);
+      if (index === -1) {
+        throw new Error(`Mock script chose "${scripted.choice}", which is not an option`);
+      }
+      targetIndex = index;
+      strength = scripted.strength ?? 0.88;
+    } else {
+      targetIndex = Math.floor(hash(seed) * options.length) % options.length;
+      strength = 0.45 + hash(`${seed}:strength`) * 0.5;
+    }
+
+    distribution = normalizeRounded(peaked(options.length, targetIndex, strength));
   }
 
-  const distribution = normalizeRounded(peaked(options.length, targetIndex, strength));
   const probabilities: Record<string, number> = {};
   options.forEach((option, index) => {
     probabilities[option] = distribution[index] ?? 0;

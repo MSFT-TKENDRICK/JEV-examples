@@ -7,7 +7,7 @@
  * could see, the distribution it received, the policy it applied, **what Jev
  * recommended, and separately what the harness actually did**. That last split is
  * the point. A log that only stores the model's answer cannot later distinguish a
- * model error from a policy bug, an operator override, or an execution failure.
+ * model error from a policy bug, a deterministic veto, or an execution failure.
  *
  * ## What this is not
  *
@@ -31,7 +31,8 @@
  *
  * `StateReference` is structurally minimizing: it stores a hash and field
  * *names*, never values. Nothing else in this module is. `recommendation.question`,
- * `policy.reason`, `failure.detail`, `override.note` and `executed.arguments` are
+ * `policy.reason`, `failure.detail`, `probes[].observation` and
+ * `executed.arguments` are
  * unconstrained strings, and in this domain they are exactly where a merchant
  * name, an amount, a card identifier, a customer narrative or a log excerpt will
  * end up. Callers are responsible for what they put in them; a record is only as
@@ -101,9 +102,15 @@ export interface PolicyOutcome {
   policyVersion: string;
   /** Thresholds in force for this decision. */
   thresholds: Readonly<Record<string, number>>;
-  /** The route taken, e.g. 'auto', 'approval_required', 'escalated', 'refused'. */
+  /**
+   * The route taken, e.g. 'act', 'probe', 'refused', 'rolled_back'.
+   *
+   * Note what is absent: there is no route that parks a decision in front of a
+   * person. Uncertainty routes to `probe` — go and find the evidence that
+   * separates the leading candidates — and the loop continues.
+   */
   route: string;
-  /** Human-readable reason the route was chosen. */
+  /** Plainly worded reason the route was chosen. */
   reason: string;
 }
 
@@ -115,13 +122,35 @@ export interface FailureOutcome {
   fallback: string;
 }
 
-/** A human's final disposition, recorded separately from Jev's answer. */
-export interface Override {
-  /** The authorization principal, e.g. 'customer', 'agent', 'ops_reviewer'. */
-  principal: string;
-  finalDisposition: string;
-  at: string;
-  note?: string;
+/**
+ * One disambiguation step: the system was torn, worked out what would settle
+ * it, went and checked, and updated.
+ *
+ * This replaces what used to be a record of a human's disposition. The trail
+ * matters for the same reason the old field did — you want to know why the
+ * final action was taken — but it records machine work rather than a handoff.
+ */
+export interface ProbeRecord {
+  probeId: string;
+  /** Expected entropy reduction in nats, computed before running it. */
+  expectedInformationGain: number;
+  /** Entropy before, so the gain can be read as a fraction of what was there. */
+  priorEntropy: number;
+  /** What the probe actually returned. */
+  observation: string;
+  /** Entropy after the update, so a probe that did not help is visible. */
+  posteriorEntropy: number;
+  costUnits: number;
+}
+
+/** Outcome of an act-verify-compensate plan, when one was run. */
+export interface ExecutionRecord {
+  outcome: 'completed' | 'rolled_back' | 'inconsistent' | 'refused' | 'aborted_before_commit';
+  reason: string;
+  stepsAttempted: number;
+  stepsVerified: number;
+  /** Set when compensation failed and the world is in an unintended state. */
+  inconsistentAt?: string;
 }
 
 export interface DecisionRecord {
@@ -151,7 +180,12 @@ export interface DecisionRecord {
     divergedFromRecommendation: boolean;
     arguments?: Readonly<Record<string, string>>;
   };
-  override: Override | null;
+  /**
+   * The disambiguation trail, oldest first. Empty when the first answer was
+   * peaked enough to act on directly.
+   */
+  probes: ProbeRecord[];
+  execution: ExecutionRecord | null;
   failure: FailureOutcome | null;
   latencyMs: number;
 }
@@ -297,8 +331,9 @@ export interface LedgerOptions {
 /**
  * The fields a caller supplies; the ledger fills in the rest.
  *
- * `recommendation`, `metrics`, `override` and `failure` are optional and default
- * to `null`, so a successful decision does not have to write four null fields.
+ * `recommendation`, `metrics`, `probes`, `execution` and `failure` are optional
+ * and default to empty or `null`, so a decision that acted on a peaked first
+ * answer does not have to write five empty fields.
  * `divergedFromRecommendation` is optional and derived — see `record()`.
  */
 export type DecisionInput = Omit<
@@ -312,14 +347,16 @@ export type DecisionInput = Omit<
   | 'service'
   | 'recommendation'
   | 'metrics'
-  | 'override'
+  | 'probes'
+  | 'execution'
   | 'failure'
   | 'executed'
 > & {
   service?: ServiceIdentity;
   recommendation?: Recommendation | null;
   metrics?: DistributionMetrics | null;
-  override?: Override | null;
+  probes?: ProbeRecord[];
+  execution?: ExecutionRecord | null;
   failure?: FailureOutcome | null;
   executed: Omit<DecisionRecord['executed'], 'divergedFromRecommendation'> & {
     /**
@@ -366,7 +403,8 @@ export function createLedger(options: LedgerOptions): Ledger {
       return { value, latencyMs: Math.round(performance.now() - started) };
     },
     record(input) {
-      const { service, recommendation, metrics, override, failure, executed, ...rest } = input;
+      const { service, recommendation, metrics, probes, execution, failure, executed, ...rest } =
+        input;
       const recommended = recommendation ?? null;
 
       const entry: DecisionRecord = {
@@ -385,7 +423,8 @@ export function createLedger(options: LedgerOptions): Ledger {
         service: service ?? options.service ?? UNKNOWN_SERVICE,
         recommendation: recommended,
         metrics: metrics ?? null,
-        override: override ?? null,
+        probes: probes ?? [],
+        execution: execution ?? null,
         failure: failure ?? null,
         executed: {
           ...executed,

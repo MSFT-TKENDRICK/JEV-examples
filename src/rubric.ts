@@ -1,11 +1,11 @@
 /**
  * Helpers for turning Jev's answers into decisions.
  *
- * The important idea: Jev returns a distribution, not a verdict. Your
- * code owns the weights, the thresholds and the escalation policy. Everything
- * here is deliberately small and boring so it stays yours to tune — the SDK
- * gives you the measurement, this file is the part you were always going to
- * write yourself.
+ * The important idea: Jev returns a distribution, not a verdict. Your code owns
+ * the weights, the thresholds and what to do about an inconclusive result.
+ * Everything here is deliberately small and boring so it stays yours to tune —
+ * the SDK gives you the measurement, this file is the part you were always
+ * going to write yourself.
  */
 
 import type { ScoreResponse } from '@typesafe-ai/sdk';
@@ -46,21 +46,29 @@ export function weightedScore(dimensions: Record<string, WeightedDimension>): nu
   return entries.reduce((sum, d) => sum + (d.weight / totalWeight) * d.value, 0);
 }
 
-export type Verdict = 'pass' | 'review' | 'fail';
+/**
+ * The middle band is `investigate`, not `review`.
+ *
+ * An inconclusive score is a statement that the evidence so far does not
+ * separate the outcomes — which is a prompt to go and get better evidence
+ * (a narrower question, an additional rubric dimension, a cheap probe), not a
+ * prompt to put the item in a queue.
+ */
+export type Verdict = 'pass' | 'investigate' | 'fail';
 
 export interface GateOptions {
-  /** At or above this, the item passes automatically. */
+  /** At or above this, the item passes. */
   pass: number;
-  /** Below this, the item fails outright. Between the two, a human looks. */
+  /** Below this, the item fails outright. Between the two, go and find out. */
   fail: number;
 }
 
-/** Turns a 0..1 value into a three-way decision with an explicit review band. */
+/** Turns a 0..1 value into a three-way decision with an explicit middle band. */
 export function gate(value: number, { pass, fail }: GateOptions): Verdict {
   if (fail > pass) throw new Error('`fail` threshold must not exceed `pass` threshold');
   if (value >= pass) return 'pass';
   if (value < fail) return 'fail';
-  return 'review';
+  return 'investigate';
 }
 
 /**
