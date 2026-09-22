@@ -16,8 +16,9 @@
  * Failure behaviour
  * -----------------
  * This script refuses rather than guessing. A missing marker, a missing
- * fragment file, an unknown fragment, or a fragment that does not begin at
- * `###` all abort the run with a message naming the problem. A README assembled
+ * fragment file, an unknown fragment, a fragment that does not begin at
+ * `###`, or a `##` heading anywhere inside one all abort the run with a
+ * message naming the problem. A README assembled
  * from a partial set of fragments would look finished while describing examples
  * that no longer exist, which is worse than not assembling at all.
  *
@@ -114,12 +115,29 @@ function main(): void {
   const out = [...lines];
   for (const region of [...found].sort((a, b) => b.marker - a.marker)) {
     const body = readFileSync(join(FRAGMENTS, `${region.id}.md`), 'utf8').trim();
-    if (!body.startsWith('###')) {
+    if (!/^### /.test(body)) {
       fail(
         `docs/fragments/${region.id}.md must start at heading level ### to match ` +
           `the per-example sections it is spliced into.`,
       );
     }
+    // A ## anywhere inside would outrank the section the fragment lives in, so
+    // the title check alone is not enough. Headings inside fenced blocks are
+    // sample output, not structure, and are skipped.
+    let fenced = false;
+    body.split('\n').forEach((line, i) => {
+      if (/^\s*```/.test(line)) {
+        fenced = !fenced;
+        return;
+      }
+      if (!fenced && /^##(?!#)\s/.test(line)) {
+        fail(
+          `docs/fragments/${region.id}.md line ${i + 1} is a ## heading. A fragment ` +
+            `titles at ### and uses #### for its subsections; a ## would outrank ` +
+            `the section it is spliced into. Line: ${line.trim()}`,
+        );
+      }
+    });
     out.splice(region.marker + 1, region.end - region.marker - 1, '', body, '');
   }
 
