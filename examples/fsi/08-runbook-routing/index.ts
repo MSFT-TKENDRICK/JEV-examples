@@ -71,12 +71,14 @@
  * safe to automate without task-specific validation; or that an offline run
  * demonstrates live reliability, cost or latency.
  *
- * The arithmetic over the inputs is real. The inputs are manufactured.
+ * The arithmetic is real. Incident inputs are synthetic; Jev distributions are
+ * live unless `JEV_MOCK=1` explicitly selects the scripted fixture transport.
  *
  * Run:  npm run fsi:08
  */
 
 import { APIConnectionError, VERSION, choice, noul } from '@typesafe-ai/sdk';
+import { activeBackend, isLiveJev } from '../../../src/client.ts';
 import { fixtureBanner, runMode } from '../../../src/fixture-label.ts';
 import { entropy } from '../../../src/information-gain.ts';
 import type { Assessment } from '../../../src/information-gain.ts';
@@ -118,8 +120,10 @@ import { remediate, stepCounts } from './remediate.ts';
 import { routingClient } from './transport.ts';
 
 // The disclosure prints before anything else, on every run.
-const live = Boolean(process.env['TYPESAFE_API_KEY']) && process.env['JEV_MOCK'] !== '1';
+const live = isLiveJev();
 fixtureBanner(live);
+console.log(dim('Incident records, diagnostic observations, costs and remediation effects are fixtures in both modes.'));
+if (live) console.log(dim('Jev responses are live; scripted transport faults and scripted answer notes are disabled.'));
 
 const ledger = createLedger({
   component: '08-runbook-routing',
@@ -489,6 +493,10 @@ for (const incident of INCIDENTS) {
           : String(response.error)
         : 'response missing a usable choice or probabilities';
 
+      if (live) {
+        process.exitCode = 1;
+        console.error(`  ${red('live Jev request failed')} ${kind}: ${detail}`);
+      }
       const decision = refusalFor(kind);
       routeLine(decision.route, decision.reason);
       console.log(`  ${dim(`${kind}: ${detail} (${latencyMs}ms) · nothing was executed`)}`);
@@ -532,7 +540,7 @@ for (const incident of INCIDENTS) {
           ` · sufficiency ${(checked.evidenceSufficient * 100).toFixed(0)}%`,
       )}`,
     );
-    if (round?.note) console.log(`  ${dim(`fixture: ${round.note}`)}`);
+    if (!live && round?.note) console.log(`  ${dim(`fixture: ${round.note}`)}`);
 
     if (degeneracyExhibit === null && incident.id === 'INC-4479') {
       degeneracyExhibit = { incident, prior: { ...checked.probabilities } };
@@ -659,9 +667,8 @@ for (const incident of INCIDENTS) {
       derivation: observation.derivation,
     });
 
-    // `posteriorEntropy` is filled in on the next pass with the entropy of the
-    // distribution actually returned, so the record contrasts what Bayes
-    // predicted against what the re-judgement produced.
+    // This is the posterior predicted by the authored diagnostic partition,
+    // not a measurement of the next Jev response.
     probeRecords.push({
       probeId: next.diagnostic.id,
       expectedInformationGain: next.assessment.expectedInformationGain,
@@ -766,7 +773,7 @@ const settledByLookup = DETERMINISTIC_ROUTES.reduce(
 console.log(
   dim(
     `\n  ${INCIDENTS.length} incidents · ${settledByLookup} settled by lookups before any request was built` +
-      `\n  ${requestsMade} request(s) to Jev across ${INCIDENTS.length - settledByLookup} residual incident(s)` +
+      `\n  ${requestsMade} request(s) to ${activeBackend() === 'local' ? 'local Laya (not Jev)' : 'Jev'} across ${INCIDENTS.length - settledByLookup} residual incident(s)` +
       `\n  ${probesRunTotal} diagnostic(s) run costing ${probeCostTotal} authored cost unit(s)` +
       '\n  zero incidents routed to a person: every outcome above is a machine action or a refusal',
   ),
@@ -790,9 +797,11 @@ console.log(
       `Not shown: anything about the inputs. ${authored} of the ${authored + 1} diagnostics return an observation`,
       'a fixture author wrote; only DG-UPSTREAM-DEPGRAPH computes its answer, by walking the',
       'flow snapshot. The diagnostics are not the ones a real SRE team runs, and their costs are',
-      'invented units, not measured times. The partitions and the re-judged distributions have',
-      'the same author, so agreement between the Bayesian prediction and the model\u2019s next',
-      'answer is one person agreeing with themselves, not corroboration.',
+      'invented units, not measured times. The Bayesian posterior is a prediction under those',
+      'authored partitions, not the measured entropy of the next Jev response.',
+      live
+        ? 'Jev distributions in this run are live measurements on synthetic incidents, not accuracy evidence.'
+        : 'Offline distributions and partitions have the same author; agreement is not corroboration.',
       '',
       'Probe selection is greedy: one step of lookahead, no planning over sequences. Fewer probes',
       'here means fewer probes against these fixtures, and nothing about a real incident',

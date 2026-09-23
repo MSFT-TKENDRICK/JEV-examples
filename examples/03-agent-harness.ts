@@ -66,7 +66,7 @@
  */
 
 import { choice, noul } from '@typesafe-ai/sdk';
-import { createClient } from '../src/client.ts';
+import { backendLabel, createClient, isLiveJev } from '../src/client.ts';
 import type { Step } from '../src/compensate.ts';
 import { runPlan } from '../src/compensate.ts';
 import { fixtureBanner, fixtureTag } from '../src/fixture-label.ts';
@@ -112,10 +112,8 @@ const MAX_ROUNDS = 5;
 // Fixtures.
 //
 // Everything below this comment is authored: the ticket, the world's observable
-// facts, and — this is the part to be sceptical of — every distribution Jev
-// "returns". The fixture decides what the model believes and how it updates.
-// That is what makes the run deterministic, and what makes it evidence about
-// the application rather than about the model.
+// facts, and the distributions used only with JEV_MOCK=1. In the default live
+// mode Jev evaluates the incident and observations; these scripts are not used.
 // ---------------------------------------------------------------------------
 
 /** A distribution over tool ids, given the observations gathered so far. */
@@ -491,11 +489,13 @@ async function judgeFirstAction(
   observations: readonly string[],
   script: DistributionScript,
 ): Promise<Judgement | null> {
-  const scripted = script(observations);
-  const { client } = createClient(() => ({
-    first_action: { distribution: scripted.distribution },
-    evidence_sufficient: { noul: scripted.evidenceSufficient },
-  }));
+  const { client } = createClient(() => {
+    const scripted = script(observations);
+    return {
+      first_action: { distribution: scripted.distribution },
+      evidence_sufficient: { noul: scripted.evidenceSufficient },
+    };
+  });
 
   try {
     const { answers } = await client.systemOne({
@@ -507,7 +507,11 @@ async function judgeFirstAction(
       questions: firstActionQuestions,
     });
     return readJudgement(answers, OFFERED);
-  } catch {
+  } catch (error) {
+    console.error(
+      'Jev first-action request failed:', error instanceof Error ? error.message : String(error),
+    );
+    process.exitCode = 1;
     return null;
   }
 }
@@ -540,7 +544,11 @@ async function judgeArgument(
     });
     const selected = answers.record?.choice;
     return typeof selected === 'string' ? selected : null;
-  } catch {
+  } catch (error) {
+    console.error(
+      'Jev record-selection request failed:', error instanceof Error ? error.message : String(error),
+    );
+    process.exitCode = 1;
     return null;
   }
 }
@@ -654,10 +662,10 @@ interface IncidentResult {
 
 async function runIncident(scenario: Scenario, verboseDegenerate: boolean): Promise<IncidentResult> {
   const world = createWorld(scenario.seed);
-  title(`${scenario.id} — ${scenario.headline}`);
+  title(live ? scenario.id : `${scenario.id} — ${scenario.headline}`);
   console.log(`  ${dim('ticket:')} ${scenario.ticket}`);
 
-  // The generative half. It reads prose; Jev never does.
+  // The generative half summarizes the ticket; Jev judges the incident and observations.
   const triager = createTriager(scenario.triage);
   const triaged = await triager.triage(scenario.ticket);
   console.log(`  ${dim(`triage (${triagerLabel(triager)}):`)} ${triaged.summary}`);
@@ -1028,7 +1036,7 @@ async function runIncident(scenario: Scenario, verboseDegenerate: boolean): Prom
 
 // ---------------------------------------------------------------------------
 
-const live = Boolean(process.env['TYPESAFE_API_KEY']) && process.env['JEV_MOCK'] !== '1';
+const live = isLiveJev();
 fixtureBanner(live);
 
 title('03 — uncertainty selects the next machine action');
@@ -1065,7 +1073,10 @@ for (const result of results) {
 }
 console.log(
   note(
-    ['"leading action" is where the distribution ended up, not what was executed — two of', 'these four executed nothing at all.'],
+    [
+      '"leading action" is where the distribution ended up, not necessarily what was executed.',
+      `${results.filter((result) => result.outcome === 'refused').length} incident(s) refused without executing a plan.`,
+    ],
     2,
   ),
 );
@@ -1094,11 +1105,8 @@ console.log(
       'evaluated against the posterior that actually held at that round; the rows do not',
       'compose into an alternative run and are not summed for that reason.',
       '',
-      'In these four fixtures no divergent round paid more for less information. That is a',
-      'property of the authored probe costs in src/tools/probes.ts, not a finding about',
-      'information-gain selection. Raise warehouse_grant_dryrun\'s partition sharpness or',
-      'drop its cost and a round that pays 3x for 1.2x would appear here, and it would',
-      'belong here just as much.',
+      'Probe costs and partitions in src/tools/probes.ts are authored assumptions.',
+      'These comparisons demonstrate policy arithmetic, not measured diagnostic value.',
     ],
     2,
   ),
@@ -1115,7 +1123,9 @@ console.log(
       'compensate.ts    the ordering guarantee, the verification, the rollback',
       'Jev              executed nothing and held no state between rounds',
       '',
-      'Every distribution above was manufactured by src/mock-fetch.ts, and the probe',
+      live
+        ? `The distributions above came from live requests to ${backendLabel()}. The probe`
+        : 'Every distribution above was manufactured by src/mock-fetch.ts. The probe',
       'costs and partitions were authored in src/tools/probes.ts. The entropy and the',
       'expected-gain arithmetic over them is real. What the run shows is what the',
       'application does with a distribution — never that the distribution is right.',

@@ -2,7 +2,7 @@
  * Scripted transports, including the ones that fail.
  *
  * `src/client.ts` already swaps the SDK's `fetch` for an offline implementation,
- * which is how every example here runs without a key. This module adds the two
+ * when `JEV_MOCK=1` is explicit. This module adds the two
  * failure transports example 08 needs, without touching the shared client:
  *
  * - **timeout** — the request never completes and the SDK's own timer fires.
@@ -12,14 +12,14 @@
  *   error. An application that reads `answers.first_runbook.choice` without
  *   checking will route on `undefined`.
  *
- * Both faults stay offline even when `TYPESAFE_API_KEY` is set: they exist to
- * exercise application paths, and firing them at the real service would prove
- * nothing while spending a request.
+ * Fault injection is confined to explicit offline runs. In live mode these
+ * incidents use the real service too; a fixture must not silently replace a
+ * live request or label a synthetic response as a measured one.
  */
 
 import { TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Fetch } from '@typesafe-ai/sdk';
-import { createClient } from '../../../src/client.ts';
+import { createClient, isLiveJev } from '../../../src/client.ts';
 import type { MockScript } from '../../../src/mock-fetch.ts';
 
 export type Fault = 'timeout' | 'malformed';
@@ -43,7 +43,7 @@ const hangingFetch: Fetch = (_input, init) =>
 const malformedFetch: Fetch = async () =>
   new Response(
     JSON.stringify({
-      model: 'jev-latest',
+      model: 'scripted-malformed-response',
       answers: {
         // No `choice`, no `probabilities`. Both are required by the SDK's types
         // and neither is checked at runtime.
@@ -65,10 +65,10 @@ export interface RoutingClient {
  * Builds the client for one incident.
  *
  * Without a fault this is the shared `createClient`, so the example uses the
- * real service when a key is present and the offline mock otherwise.
+ * real service by default and the offline mock only with `JEV_MOCK=1`.
  */
 export function routingClient(script: MockScript, fault?: Fault): RoutingClient {
-  if (!fault) return createClient(script);
+  if (isLiveJev() || !fault) return createClient(script);
 
   return {
     client: new TypeSafeClient({

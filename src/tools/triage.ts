@@ -27,6 +27,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import type { LanguageModel } from 'ai';
 import type { LanguageModelV4GenerateResult } from '@ai-sdk/provider';
 import { z } from 'zod';
+import { isLiveGeneration } from '../client.ts';
 
 export const triageSchema = z.object({
   summary: z.string().describe('One sentence describing what the customer reported.'),
@@ -46,7 +47,7 @@ export interface Triager {
 const MODEL_ID = 'openai/gpt-5.6-terra';
 
 export function createTriager(scripted: Triage): Triager {
-  const live = Boolean(process.env['AI_GATEWAY_API_KEY']) && process.env['JEV_MOCK'] !== '1';
+  const live = isLiveGeneration();
 
   const replay = async (): Promise<LanguageModelV4GenerateResult> => ({
     content: [{ type: 'text', text: JSON.stringify(scripted) }],

@@ -2,7 +2,7 @@
 
 This repository demonstrates one pattern: **Jev returns a probability distribution
 over a bounded option set, and application code turns that distribution into an
-explicit abstention or escalation policy.**
+explicit action, probing or refusal policy.**
 
 This document is about the limits of that pattern. It exists because the rest of
 the repo would otherwise invite overclaiming, and because in financial services
@@ -11,10 +11,18 @@ the cost of an overclaim is not embarrassment — it is a control failure.
 ## The claim this repo is allowed to make
 
 > Jev exposes a distribution over a bounded action space, letting the application
-> implement explicit abstention and escalation policies. Whether those policies
+> implement explicit action, probing and refusal policies. Whether those policies
 > improve safety or efficiency must be validated empirically for each domain.
 
 Everything below follows from taking that sentence literally.
+
+The examples call live Jev through Vercel by default with `AI_GATEWAY_API_KEY`
+or `VERCEL_OIDC_TOKEN`; only explicit `JEV_MOCK=1` opts into scripted Jev responses.
+No direct TypeSafe credential or endpoint is used. Their records, incidents and action
+targets remain synthetic. The published excerpts and recording are fixture
+captures, not evidence of live model quality. Deterministic eligibility and
+preconditions constrain which actions may run; Jev still supplies the semantic
+decision distribution over the eligible alternatives.
 
 ## Bounded output is not safe action
 
@@ -52,7 +60,7 @@ None of that is demonstrated here, and none of it is measured here.
 `examples/fsi/eval/` ships the *instrument*, not the results: the offline sweep
 runs over manufactured distributions and so can only characterize the policy,
 and `perturb.ts` — the only part that could speak to option-set stability —
-requires a real key and has never been executed.
+requires a real key. No live perturbation measurements are published here.
 
 One negative result does fall out of the offline sweep, and it is worth stating
 because it cuts against the pattern rather than for it: the two fixtures where

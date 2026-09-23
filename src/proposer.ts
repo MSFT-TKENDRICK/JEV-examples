@@ -16,6 +16,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import type { LanguageModel } from 'ai';
 import type { LanguageModelV4GenerateResult } from '@ai-sdk/provider';
 import { z } from 'zod';
+import { isLiveGeneration } from './client.ts';
 
 /** A proposed shell command, with the reason the model wants to run it. */
 export const proposalSchema = z.object({
@@ -42,13 +43,13 @@ export interface Proposer {
 /**
  * Builds the proposing model.
  *
- * With `AI_GATEWAY_API_KEY` set, this is a real Gateway call. Without one, it
+ * With `AI_GATEWAY_GENERATIVE=1` and Gateway credentials, this is a paid call. Otherwise, it
  * is `MockLanguageModelV4` from `ai/test` replaying `scripted` — the same
  * `generateObject` code path either way, including schema validation.
  */
 export function createProposer(route: Route, scripted: readonly Proposal[]): Proposer {
   const modelId = ROUTES[route];
-  const live = Boolean(process.env['AI_GATEWAY_API_KEY']) && process.env['JEV_MOCK'] !== '1';
+  const live = isLiveGeneration();
 
   let next = 0;
   const replay = async (): Promise<LanguageModelV4GenerateResult> => ({

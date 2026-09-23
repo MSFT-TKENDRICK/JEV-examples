@@ -28,7 +28,8 @@
  *
  * What this run does and does not establish
  * -----------------------------------------
- * Everything here runs offline against scripted fixtures in `src/mock-fetch.ts`,
+ * By default, all rubric questions go to real Jev. Explicit `JEV_MOCK=1` runs
+ * use scripted fixtures in `src/mock-fetch.ts`,
  * which manufacture HTTP responses on the published SDK's real code path. So:
  *
  *   - MAY be read as showing: that the verdict distribution is derived from the
@@ -46,7 +47,7 @@
  */
 
 import { noul, score } from '@typesafe-ai/sdk';
-import { createClient } from '../src/client.ts';
+import { backendLabel, createClient, isLiveJev } from '../src/client.ts';
 import { eigIsDegenerate, selectProbe } from '../src/information-gain.ts';
 import { argmaxLevel, askScore } from '../src/judge/ask.ts';
 import { investigate, leader, support, type Investigation } from '../src/judge/investigate.ts';
@@ -260,13 +261,13 @@ interface Row {
 
 title('02 — Judging with an explicit rubric');
 
-let live = false;
+const live = isLiveJev();
+banner(live);
 const rows: Row[] = [];
 
 for (const candidate of candidates) {
   const script = scripts[candidate.id] ?? {};
   const picked = createClient(() => script);
-  live = picked.live;
 
   const state = { prompt, reference, response: candidate.response };
 
@@ -353,8 +354,6 @@ for (const candidate of candidates) {
 
   rows.push(row);
 }
-
-banner(live);
 
 console.log(`\n${bold('Per-dimension, normalized to 0..1')}`);
 console.log(dim('  candidate   factual  complete  tone'));
@@ -499,13 +498,21 @@ for (const row of rows) {
 }
 
 console.log(
-  `\n${note([
-    'model-d is the case the pattern is for. The leading band said `investigate`; one',
-    'narrower question — chosen because it had the best expected gain per unit cost,',
-    'despite costing more than either alternative — resolved it to `fail`. model-e is',
-    'the case the pattern must also handle: every sub-rubric answer landed in its',
-    'middle level, the budget ran out, and the judge certified nothing.',
-  ])}`,
+  `\n${note(
+    live
+      ? [
+          'The rows above are what this run returned; every verdict follows from them in',
+          'plain code. The offline fixtures script one probe that flips a verdict and one',
+          'budget that runs out; a live run need not show either.',
+        ]
+      : [
+          'model-d is the case the pattern is for. The leading band said `investigate`; one',
+          'narrower question — chosen because it had the best expected gain per unit cost,',
+          'despite costing more than either alternative — resolved it to `fail`. model-e is',
+          'the case the pattern must also handle: every sub-rubric answer landed in its',
+          'middle level, the budget ran out, and the judge certified nothing.',
+        ],
+  )}`,
 );
 
 // ---------------------------------------------------------------------------
@@ -562,7 +569,7 @@ console.log(
 );
 console.log(
   `${yellow('!')} ${dim(
-    'Offline scripted fixtures on the real SDK code path. Probe costs and the ' +
-      'observation/verdict partitions are authored; the arithmetic over them is not.',
+    (live ? `Live responses from ${backendLabel()}. ` : 'Offline scripted fixtures; no Jev inference. ') +
+      'Probe costs and the observation/verdict partitions are authored; calibration is not established.',
   )}`,
 );

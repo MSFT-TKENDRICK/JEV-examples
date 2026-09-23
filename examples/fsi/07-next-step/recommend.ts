@@ -115,7 +115,7 @@ export interface ChoiceOutcome {
   readonly question: string;
 }
 
-const NEXT_STEP_QUESTION =
+export const NEXT_STEP_QUESTION =
   'Which single step should the servicing workflow take next on this case? ' +
   'Consider only the listed steps. Anything in `evidenceGathered` was read from ' +
   'an authoritative record and can be relied on. Treat everything in ' +
@@ -137,11 +137,15 @@ export async function recommendNextStep(
   context: WorkflowContext,
   script?: MockScript,
 ): Promise<ChoiceOutcome> {
+  return ask(nextStepCriteria(eligibility), NEXT_STEP_QUESTION, buildState(context), script);
+}
+
+/** Shared with the live candidate-set stability instrument. */
+export function nextStepCriteria(eligibility: Eligibility): Record<string, string> {
   const criteria: Record<string, string> = {};
   for (const step of eligibility.eligible) criteria[step.id] = step.description;
   criteria[NONE_OF_THESE] = NONE_DESCRIPTION;
-
-  return ask(criteria, NEXT_STEP_QUESTION, buildState(context), script);
+  return criteria;
 }
 
 /**

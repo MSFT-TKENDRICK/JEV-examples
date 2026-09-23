@@ -37,10 +37,11 @@
  * ## What is real and what is authored
  *
  * The entropy arithmetic is real: it is computed by `src/information-gain.ts`
- * over the numbers it is given. The numbers are manufactured. The partitions
+ * over the numbers it is given. Distributions come from Jev in live mode and
+ * are manufactured only in explicit offline mode. The partitions
  * that say which observations are consistent with which remediations were
  * written by the same person who wrote the fixtures, so when a probe's predicted
- * posterior lines up with the re-judged distribution, that agreement is not
+ * posterior lines up with an offline re-judged distribution, that agreement is not
  * evidence of anything — it is one author agreeing with themselves. The example
  * prints both numbers anyway, because a reader who can see them can discount
  * them; a reader shown only a conclusion cannot.

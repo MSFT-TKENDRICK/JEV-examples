@@ -1,50 +1,39 @@
 /**
- * Candidate-set perturbation — the live instrument.
+ * Live candidate-set stability measurement; never part of the offline sweep.
  *
- * ## Status: this has never been run
+ * Uses example 07's first synthetic case, minimized state, eligible options and
+ * question. Four real requests hold the state/question fixed: baseline, add an
+ * unrelated test-only option, remove the least-supported unselected action,
+ * and reverse the options. Nothing is executed and no fixture answers are read.
  *
- * Not once, against anything. No result in this repository was produced by it,
- * and no claim anywhere rests on it. It ships as runnable code rather than as a
- * table of numbers precisely because producing that table would require a real
- * key and a real service, and fabricating one would be the single most damaging
- * thing this repository could do.
- *
- * ## The question it exists to ask
- *
- * A threshold over a distribution is only meaningful if the distribution is
- * stable under changes that ought not to matter. Adding an irrelevant option,
- * removing an unchosen one, or simply reordering the list are all things an
- * application does routinely as a catalog evolves — and none of them should move
- * the mass on an unrelated answer very much.
- *
- * If they do, then a threshold calibrated against one option set does not
- * transfer to another, and every number in the offline sweep is a property of
- * one particular catalog rather than of the policy. That is a question about the
- * service, so only the service can answer it.
- *
- * ## How to run it
- *
- * ```
- * TYPESAFE_API_KEY=... node examples/fsi/eval/perturb.ts
- * ```
- *
- * Record what comes back, including the date and the model version. Do not
- * quote a result from one run as a property of the service.
+ * Run: AI_GATEWAY_API_KEY=... node examples/fsi/eval/perturb.ts
+ * VERCEL_OIDC_TOKEN is also supported. Uses free typesafe-ai/jev through Vercel
+ * AI Gateway's TypeSafe-compatible endpoint, not a direct TypeSafe account.
+ * Do not set JEV_MOCK=1. Output is JSONL with model, time, latency, full
+ * distributions and raw shared-option mass deltas. Removal changes
+ * normalization; these deltas are descriptive, not an accuracy score or a
+ * pass/fail stability threshold. One sample per variant cannot separate
+ * sampling variation from option-set effects.
  */
 
-import { TypeSafeClient } from '@typesafe-ai/sdk';
-import { bold, dim, note, title } from '../../../src/ui.ts';
+import { choice, VERSION } from '@typesafe-ai/sdk';
+import type { JsonValue, TypeSafeClient } from '@typesafe-ai/sdk';
+import { createAuthority } from '../../../src/authority.ts';
+import { createClient, isLiveJev } from '../../../src/client.ts';
+import { runMode } from '../../../src/fixture-label.ts';
+import { computeEligibility, NONE_OF_THESE } from '../../../src/workflow-machine.ts';
+import {
+  buildState,
+  nextStepCriteria,
+  NEXT_STEP_QUESTION,
+} from '../07-next-step/recommend.ts';
+import { CARD_IN_SCOPE, SCENARIOS, seed } from '../07-next-step/scenarios.ts';
 
 export interface Perturbation {
   label: string;
   optionIds: readonly string[];
 }
 
-/**
- * Builds the perturbations for one option set: the baseline, one with an
- * unrelated option added, one with the lowest-mass option removed, and one
- * merely reordered.
- */
 export function perturbationsOf(
   optionIds: readonly string[],
   spurious: string,
@@ -58,40 +47,114 @@ export function perturbationsOf(
   ];
 }
 
-async function main(): Promise<void> {
-  title('FSI eval — candidate-set perturbation');
+export interface Measurement extends Perturbation {
+  measuredAt: string;
+  model: string;
+  latencyMs: number;
+  choice: string;
+  probabilities: Record<string, number>;
+  /** Raw mass difference, on options shared with the baseline only. */
+  deltasFromBaseline: Record<string, number>;
+}
 
-  if (!process.env['TYPESAFE_API_KEY']) {
-    console.log(
-      note([
-        'TYPESAFE_API_KEY is not set, so nothing ran — which is also the state',
-        'this file has been in for its entire existence. It has never been',
-        'executed against the live service, by anyone, and no result in this',
-        'repository came from it.',
-        '',
-        'Set a key to run it. Whatever it prints is a measurement of one service',
-        'version on one day, not a property of the service.',
-      ]),
-    );
-    return;
+const SPURIOUS = 'test_only_update_mail_preferences';
+const SPURIOUS_DESCRIPTION =
+  'Update the customer’s marketing mailing preferences. This does not address card payments.';
+
+/** Real SDK requests; callers may inject a test transport, never fixture answers. */
+export async function measurePerturbations(
+  client: Pick<TypeSafeClient, 'systemOne'>,
+  state: Record<string, JsonValue>,
+  criteria: Record<string, string>,
+  report: (measurement: Measurement) => void = () => {},
+): Promise<Measurement[]> {
+  const ids = Object.keys(criteria);
+  if (ids.length < 3 || SPURIOUS in criteria) {
+    throw new Error('Perturbation requires at least three baseline options and no test-only option.');
+  }
+  const allCriteria: Record<string, string> = { ...criteria, [SPURIOUS]: SPURIOUS_DESCRIPTION };
+  const measurements: Measurement[] = [];
+
+  async function measure(variant: Perturbation): Promise<Measurement> {
+    const offered = Object.fromEntries(variant.optionIds.map((id) => [id, allCriteria[id]!]));
+    const started = performance.now();
+    const result = await client.systemOne({
+      state,
+      questions: { selection: choice(NEXT_STEP_QUESTION, offered) },
+    });
+    const answer = result.answers.selection;
+    const probabilities = answer?.probabilities;
+    if (
+      !answer || !variant.optionIds.includes(answer.choice) ||
+      !probabilities || typeof probabilities !== 'object' ||
+      Object.keys(probabilities).some((id) => !variant.optionIds.includes(id)) ||
+      variant.optionIds.some((id) =>
+        typeof probabilities[id] !== 'number' || !Number.isFinite(probabilities[id]) ||
+        probabilities[id]! < 0 || probabilities[id]! > 1,
+      ) ||
+      Math.abs(Object.values(probabilities).reduce((sum, p) => sum + p, 0) - 1) > 0.01
+    ) {
+      throw new Error(`Unusable distribution for ${variant.label}; no measurement fabricated.`);
+    }
+    const baseline = measurements[0];
+    const measurement: Measurement = {
+      ...variant,
+      measuredAt: new Date().toISOString(),
+      model: result.model,
+      latencyMs: Math.round(performance.now() - started),
+      choice: answer.choice,
+      probabilities,
+      deltasFromBaseline: Object.fromEntries(
+        variant.optionIds
+          .filter((id) => baseline && id in baseline.probabilities)
+          .map((id) => [id, probabilities[id]! - baseline!.probabilities[id]!]),
+      ),
+    };
+    measurements.push(measurement);
+    report(measurement);
+    return measurement;
   }
 
-  console.log(
-    note([
-      'Running against the live TypeSafe API. Responses are not scripted.',
-      'This measures the stability of the distribution under changes to the',
-      'option set. It does not measure accuracy, and it establishes nothing',
-      'about whether the answers are correct.',
-    ]),
-  );
+  const baseline = await measure({ label: 'baseline', optionIds: ids });
+  const dropped = ids
+    .filter((id) => id !== baseline.choice && id !== NONE_OF_THESE)
+    .sort((a, b) => baseline.probabilities[a]! - baseline.probabilities[b]!)[0];
+  if (!dropped) throw new Error('No unselected action is available to remove.');
+  for (const variant of perturbationsOf(ids, SPURIOUS, dropped).slice(1)) {
+    await measure(variant);
+  }
+  return measurements;
+}
 
-  const client = new TypeSafeClient();
-  console.log(`\n${bold('  perturbation')}  ${dim('selected → mass')}`);
-  console.log(dim('  (implement the state and question for the option set under test)'));
-  // Deliberately left to the reader: the state and question belong to the
-  // catalog being tested, and inventing one here would produce a number that
-  // looks like evidence while measuring nothing in particular.
-  void client;
+async function main(): Promise<void> {
+  if (!isLiveJev()) {
+    throw new Error('Candidate-set perturbation requires live Jev. Unset JEV_MOCK and set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN (or JEV_BACKEND=local for the Laya proxy, not Jev).');
+  }
+  const scenario = SCENARIOS[0];
+  if (!scenario) throw new Error('The example 07 seed scenario is missing.');
+  const context = {
+    snapshot: createAuthority(seed()).read(),
+    principal: scenario.principal,
+    cardId: CARD_IN_SCOPE,
+    sources: scenario.sources,
+    completed: [],
+    evidence: [],
+  };
+  console.log(JSON.stringify({
+    instrument: 'candidate-set-perturbation',
+    mode: runMode(true),
+    scenario: scenario.id,
+    sdkVersion: VERSION,
+    question: NEXT_STEP_QUESTION,
+    limitation: 'Synthetic state, four live requests, no action execution or accuracy claim. Raw mass deltas include normalization effects.',
+  }));
+  const { client } = createClient();
+  await measurePerturbations(
+    client,
+    buildState(context),
+    nextStepCriteria(computeEligibility(context)),
+    (measurement) => console.log(JSON.stringify(measurement)),
+  );
 }
 
 if (import.meta.filename === process.argv[1]) {

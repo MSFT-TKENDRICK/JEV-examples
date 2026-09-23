@@ -6,4 +6,6 @@ langchain>=1.0.0
 # langchain_harness.py builds real agents around the TypeSafe middleware, so it
 # needs a generative provider too. Swap this for whichever provider you use;
 # if you change it, change the `openai:` model strings in the example to match.
+# Jev uses the free Vercel Gateway catalog entry; these OpenAI calls are paid
+# and require a separate explicit OPENAI_API_KEY.
 langchain-openai>=0.2.0

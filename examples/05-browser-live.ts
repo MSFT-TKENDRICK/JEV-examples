@@ -1,7 +1,7 @@
 /**
  * 05 - The same loop, against a real browser.
  *
- * Example 04 walks the maze offline. This one walks it in Chrome, over CDP,
+ * Example 04 uses a simulated browser. This one walks it in Chrome, over CDP,
  * against the HTML in `examples/site` - and it does so by handing the *same*
  * `walk()` a driver. The decision code does not know which it is running
  * against. Nothing about the policy, the probe selection, the beam or the
@@ -22,15 +22,14 @@
  *   node examples/05-browser-live.ts             record to docs/media
  *   node examples/05-browser-live.ts --no-video  drive a visible browser only
  *
- * With `TYPESAFE_API_KEY` set the judgements are real Jev calls. Without one
- * they are scripted through `src/mock-fetch.ts` and the browser half is still
- * entirely real.
+ * Judgements are real Jev calls via Vercel AI Gateway credentials. Only explicit
+ * `JEV_MOCK=1` uses scripted judgements; the browser half remains real.
  */
 
 import { resolve } from 'node:path';
 
 import { openSession } from '../src/browser-driver.ts';
-import { createClient } from '../src/client.ts';
+import { activeBackend, backendLabel, createClient } from '../src/client.ts';
 import type { SiteScript } from '../src/site/judges.ts';
 import { createJevJudge } from '../src/site/judges.ts';
 import type { WalkEvent } from '../src/site/walk.ts';
@@ -163,8 +162,8 @@ console.log(`\n  ${dim(TASK)}`);
 
 const judge = createJevJudge({ script: SCRIPT, beamWidth: 3 });
 const session = await openSession({
-  label: 'Jev',
-  detail: live ? 'live judgements, beam width 3' : 'scripted judgements, beam width 3',
+  label: live ? (activeBackend() === 'local' ? 'Local Laya (not Jev)' : 'Jev') : 'Fixture',
+  detail: live ? `live judgements from ${backendLabel()}, beam 3` : 'SCRIPTED MOCK, no Jev inference',
   ...(record ? { outputPath } : {}),
 });
 
@@ -203,8 +202,10 @@ console.log(
           'to the element the policy chose, real typing into the re-issue form and values read back',
           'out of the DOM. The navigation itself follows the element\'s own href rather than a',
           'synthetic coordinate click, because a coordinate click fires twice across a page load.',
-          'What is scripted offline is the judgement at each page, and the site itself was written',
-          'to be hard. The video is evidence of what the application does with a distribution - not',
+          live
+            ? `Judgements came from live requests to ${backendLabel()}; the site and probe assumptions are authored.`
+            : 'JEV_MOCK=1 scripted every judgement; this recording is not evidence of Jev inference.',
+          'The video is evidence of what the application does with a distribution - not',
           'evidence that the distribution deserves trust.',
         ],
     2,

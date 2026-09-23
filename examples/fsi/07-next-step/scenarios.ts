@@ -2,8 +2,8 @@
  * The scripted fixtures.
  *
  * Every distribution below was written by hand and manufactured by
- * `src/mock-fetch.ts`. The model's judgment is predetermined in all eight cases,
- * so what a run demonstrates is the *application's* behaviour on a given
+ * `src/mock-fetch.ts` only with `JEV_MOCK=1`. Live requests ignore these scripted
+ * answers. An offline run demonstrates the *application's* behaviour on a given
  * distribution shape — never that Jev produces that shape on real cases.
  *
  * ## Why the answers are arrays

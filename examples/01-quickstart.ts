@@ -24,7 +24,8 @@
  *
  * What this run does and does not establish
  * -----------------------------------------
- * It runs offline against scripted fixtures in `src/mock-fetch.ts`, which
+ * By default, the questions go to real Jev. Explicit `JEV_MOCK=1` runs use
+ * scripted fixtures in `src/mock-fetch.ts`, which
  * manufacture HTTP responses on the published SDK's real code path. The probe
  * costs and the mapping from an observation to the departments it is consistent
  * with are **authored**; the ranking, the posterior and the routing decision are
@@ -36,7 +37,7 @@
  */
 
 import { choice, noul, score } from '@typesafe-ai/sdk';
-import { createClient } from '../src/client.ts';
+import { activeBackend, backendLabel, createClient } from '../src/client.ts';
 import { partitionProbe, type Probe } from '../src/information-gain.ts';
 import { askChoice } from '../src/judge/ask.ts';
 import { investigate, leader } from '../src/judge/investigate.ts';
@@ -373,13 +374,15 @@ for (const [index, ticket] of tickets.entries()) {
 
 console.log(
   `\n${green('✓')} ${dim(
-    'Same code, two tickets: one where the follow-up moved the route off the first ' +
-      'answer, one where the budget ran out and the application changed nothing.',
+    live
+      ? `Two tickets judged by ${activeBackend() === 'local' ? 'local Laya (not Jev)' : 'Jev'}. Routes and follow-ups above use the returned answers, not the fixture scripts.`
+      : 'Same code, two tickets: one where the follow-up moved the route off the first ' +
+        'answer, one where the budget ran out and the application changed nothing.',
   )}`,
 );
 console.log(
   `${yellow('!')} ${dim(
-    'Offline scripted fixtures on the real SDK code path. Probe costs and the ' +
-      'answer/department partitions are authored; the arithmetic over them is not.',
+    (live ? `Live responses from ${backendLabel()}. ` : 'Offline scripted fixtures; no Jev inference. ') +
+      'Probe costs and the answer/department partitions are authored; calibration is not established.',
   )}`,
 );

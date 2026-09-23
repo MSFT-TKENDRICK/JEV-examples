@@ -6,7 +6,11 @@ The official LangChain integration for TypeSafe is Python-only. There is no
 the language.
 
     pip install "langchain-typesafe==0.0.1a3"
-    export TYPESAFE_API_KEY=...
+    export AI_GATEWAY_API_KEY=...
+
+VERCEL_OIDC_TOKEN is also supported. Jev uses Vercel AI Gateway's free
+typesafe-ai/jev catalog entry, not a direct TypeSafe account. An explicit
+TYPESAFE_DEFAULT_MODEL override may select a model with different pricing.
 
 Two naming differences from the Vercel AI SDK, which trip people up when they
 port code between the two:
@@ -27,10 +31,10 @@ Run:  python examples/python/judge_rubric.py
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from langchain_typesafe import Choice, Noul, Score, TypeSafeClassifier
+from jev_gateway import gateway_classifier
 
 REFERENCE = (
     "The standard refund window is 30 days. After 30 days refunds are not "
@@ -162,10 +166,10 @@ def judge(classifier: TypeSafeClassifier, candidate: str, response: str) -> Judg
 
 
 def main() -> None:
-    if not os.environ.get("TYPESAFE_API_KEY"):
-        raise SystemExit("Set TYPESAFE_API_KEY before running this example.")
-
-    classifier = TypeSafeClassifier()
+    try:
+        classifier = gateway_classifier()
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
     print(f"{'candidate':<10} {'score':>6}  {'verdict':<8} outcome")
     print("-" * 64)
