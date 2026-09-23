@@ -13,10 +13,14 @@ closed. That is the clearest statement of what Jev is for in an agent: the
 cheap, fast, structured judgment that gates an expensive, irreversible action.
 
     pip install -r requirements.txt
-    export TYPESAFE_API_KEY=...
+    export AI_GATEWAY_API_KEY=...
     export OPENAI_API_KEY=...
 
 Caveats worth respecting:
+  - Jev uses the free typesafe-ai/jev entry through Vercel AI Gateway, with
+    AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN. No direct TypeSafe key is needed.
+    The OpenAI generative models are separate PAID calls: this harness requires
+    an explicit OPENAI_API_KEY and is not an entirely free agent.
   - The package is alpha (0.0.1a3) and the middleware is explicitly
     experimental. Pin the version.
   - `AutoModeMiddleware` REFUSES risky calls; it returns an error ToolMessage.
@@ -34,37 +38,40 @@ import os
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, AgentState, Runtime
-from langchain_typesafe import Choice, ChoiceAnswer, NoulCriteria, TypeSafeClassifier
+from langchain_typesafe import Choice, ChoiceAnswer, NoulCriteria
 from langchain_typesafe.experimental.middleware import (
     AutoModeMiddleware,
     ModelChoice,
     ModelRouterMiddleware,
 )
 from typing_extensions import NotRequired
+from jev_gateway import gateway_classifier, gateway_middleware, gateway_settings
 
 
 # ---------------------------------------------------------------------------
 # 1. Model routing — spend the big model only where it earns its cost.
 # ---------------------------------------------------------------------------
-router = ModelRouterMiddleware(
-    choices={
-        "fast": ModelChoice(
-            model="openai:gpt-4o-mini",
-            criteria=(
-                "Direct lookups, extraction, and localized changes with "
-                "explicit targets."
+def build_router() -> ModelRouterMiddleware:
+    return gateway_middleware(
+        ModelRouterMiddleware,
+        choices={
+            "fast": ModelChoice(
+                model="openai:gpt-4o-mini",
+                criteria=(
+                    "Direct lookups, extraction, and localized changes with "
+                    "explicit targets."
+                ),
             ),
-        ),
-        "powerful": ModelChoice(
-            model="openai:gpt-4o",
-            criteria=(
-                "Architecture, novel root-cause reasoning, and high-stakes "
-                "decisions."
+            "powerful": ModelChoice(
+                model="openai:gpt-4o",
+                criteria=(
+                    "Architecture, novel root-cause reasoning, and high-stakes "
+                    "decisions."
+                ),
             ),
-        ),
-    },
-    instructions="Choose the least costly model that can complete the task safely.",
-)
+        },
+        instructions="Choose the least costly model that can complete the task safely.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -80,13 +87,15 @@ def delete_file(path: str) -> str:
     return f"deleted {path}"
 
 
-auto_mode = AutoModeMiddleware(
-    tools=[delete_file],
-    criteria=NoulCriteria(
-        true="The call writes, deletes, publishes, or changes access.",
-        false="The call only reads public or user-provided data.",
-    ),
-)
+def build_auto_mode() -> AutoModeMiddleware:
+    return gateway_middleware(
+        AutoModeMiddleware,
+        tools=["delete_file"],
+        criteria=NoulCriteria(
+            true="The call writes, deletes, publishes, or changes access.",
+            false="The call only reads public or user-provided data.",
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +114,7 @@ class TriageMiddleware(AgentMiddleware[TriageState]):
     state_schema = TriageState
 
     def __init__(self) -> None:
-        self.classifier = TypeSafeClassifier()
+        self.classifier = gateway_classifier()
 
     def before_agent(
         self, state: TriageState, runtime: Runtime
@@ -133,18 +142,21 @@ class TriageMiddleware(AgentMiddleware[TriageState]):
 
 
 def main() -> None:
-    missing = [
-        name
-        for name in ("TYPESAFE_API_KEY", "OPENAI_API_KEY")
-        if not os.environ.get(name)
-    ]
-    if missing:
-        raise SystemExit(f"Set {' and '.join(missing)} before running this example.")
+    try:
+        gateway_settings()
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    if not os.environ.get("OPENAI_API_KEY", "").strip():
+        raise SystemExit(
+            "Set OPENAI_API_KEY to opt into the paid OpenAI generative calls. "
+            "Only the default Jev classifier through Vercel AI Gateway is free."
+        )
+    print("Jev: free Gateway catalog model by default. OpenAI agent calls: paid.")
 
     agent = create_agent(
         "openai:gpt-4o-mini",
         tools=[read_file, delete_file],
-        middleware=[router, auto_mode, TriageMiddleware()],
+        middleware=[build_router(), build_auto_mode(), TriageMiddleware()],
     )
 
     result = agent.invoke(

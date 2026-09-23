@@ -9,6 +9,14 @@ The central discipline:
 > The examples prove what the application does with a distribution, not that the
 > distribution deserves trust.
 
+The runnable Jev integrations use Vercel's live TypeSafe-compatible API by default,
+with `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` and model `typesafe-ai/jev`.
+Explicit `JEV_MOCK=1` selects fixture responses; the
+threshold sweep and fault-injection checks are intentionally fixture-only.
+Committed excerpts and the browser recording are fixture captures, not live
+evidence. These contracts still apply to live runs: connectivity and decisions on
+synthetic scenarios do not establish calibration, reliability or production safety.
+
 Each contract below must be reproduced in the header comment of the example it
 governs and in that example's README section. If a sentence you want to write is
 not on the allowed list, it does not go in.
@@ -68,7 +76,9 @@ review item and does not assume anyone is watching.
   should require authorization is a question about that action, and this
   repository does not answer it.
 - That the entropy drop across a run measures anything about Jev's calibration.
-  The prior was scripted, so the posterior is a consequence of the script.
+  In the committed captures the prior was scripted, so the posterior is a
+  consequence of the script. Live entropy changes alone are not calibration
+  measurements either.
 - That a generative model cannot probe. It can; the claim is narrower and is
   about what a bare point estimate supplies, not about what a system built
   around one can be made to do.
@@ -124,8 +134,8 @@ review item and does not assume anyone is watching.
 - Reversibility plus verification makes an action safe to take without
   authorization. It makes the action **undoable**, which is a different and
   smaller property.
-- The example demonstrates live TypeSafe API behaviour, latency, cost or
-  reliability.
+- The fixture output demonstrates live TypeSafe API behaviour, latency, cost or
+  reliability; or a live example run establishes representative service quality.
 - The generative control arm represents all Vercel AI SDK or tool-calling
   implementations. *(A competent generative implementation can also be constrained
   to enumerated IDs and subjected to the same referential checks. The control arm
@@ -268,8 +278,9 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
   the ledger, not read from a label.
 - It runs both examples as subprocesses and reads their ledgers, so it exercises
   the real pipelines rather than a reimplementation of them.
-- The live perturbation harness ships as runnable code requiring a real
-  `TYPESAFE_API_KEY`.
+- The live perturbation harness ships as runnable code requiring Gateway credentials
+  (`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`) and rejecting `JEV_MOCK=1`. It measures candidate-set changes
+  against synthetic state without executing the recommended actions.
 
 ### Must not claim
 
@@ -304,5 +315,8 @@ Built: `examples/fsi/eval/`, entry point `npm run fsi:eval`.
   for a step whose alternatives were never written down. Folding the two
   together sends a reader looking for a missing record that exists, and
   inflates the count of things this repository failed to measure.
-- The perturbation results are known. **The live path has never been executed.**
+- The perturbation results are known. **No live perturbation results are published here.**
   The repo ships the instrument, not the findings.
+- That raw shared-option mass deltas establish accuracy or calibrated stability.
+  Adding or removing options changes normalization, and one sample per variant
+  cannot separate sampling variation from option-set effects.

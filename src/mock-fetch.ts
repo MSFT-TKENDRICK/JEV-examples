@@ -1,8 +1,8 @@
 /**
  * An offline `Fetch` for the TypeSafe SDK.
  *
- * `TypeSafeClient` takes a `fetch` option, so the examples in this repo run
- * without an API key by swapping the transport rather than the client. Every
+ * `TypeSafeClient` takes a `fetch` option, so explicit `JEV_MOCK=1` test runs
+ * work without an API key by swapping the transport rather than the client. Every
  * other layer — request building, retries, timeouts, error classes, response
  * typing — is the real SDK on the real code path.
  *

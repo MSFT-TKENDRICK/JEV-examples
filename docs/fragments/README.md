@@ -26,9 +26,13 @@ rather than adding one. The script is wired centrally at integration.
 - Include the example's allowed-claims / must-not-claim summary, or link to
   [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
 - State the scripted-fixture constraint explicitly. Do not rely on the reader
-  having seen it elsewhere in the README.
+  having seen it elsewhere in the README. Distinguish the live default command
+  (Vercel `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` required) from explicit
+  `JEV_MOCK=1` captures. A Gateway credential alone must not be described as
+  enabling paid generative models; those require `AI_GATEWAY_GENERATIVE=1`.
 - Show real output from a real run, not illustrative output. Capture it with
-  `NO_COLOR=1` so the escape codes do not end up in the markdown.
+  `NO_COLOR=1` so the escape codes do not end up in the markdown. Label fixture
+  captures as such; a captured run is not necessarily a live API run.
 
 Fragments inherit the architecture contract at the top of
 [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md). In particular, no fragment may

@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "examples/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "examples/**/*.ts", "scripts/**/*.ts", "local-jev/protocol.ts", "local-jev/app.ts", "local-jev/app.check.ts"]
 }

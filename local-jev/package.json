@@ -1,0 +1,18 @@
+{
+  "name": "jev-examples-local-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Opt-in local /v1/systemone proxy backed by the open Laya model through @receptron/laya. Not Jev.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node main.ts",
+    "parity": "node parity.ts"
+  },
+  "dependencies": {
+    "@huggingface/tokenizers": "^0.2.0",
+    "@receptron/laya": "0.1.2"
+  }
+}

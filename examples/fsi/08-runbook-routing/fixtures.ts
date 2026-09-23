@@ -15,9 +15,9 @@
  *
  * ## What is scripted, and what is not
  *
- * Everything here is manufactured: the incidents, the spool text, the model's
- * answers, the probability distributions, and — with exactly one exception —
- * what each diagnostic observes when it runs.
+ * The incidents, spool text, and — with exactly one exception — diagnostic
+ * observations are manufactured in both modes. Model answers and distributions
+ * below are used only with `JEV_MOCK=1`; live requests ignore them.
  *
  * The exception is `DG-UPSTREAM-DEPGRAPH`, which computes its observation by
  * walking `FLOW_SNAPSHOT` in `src/runbook-catalog.ts`. That one is a real

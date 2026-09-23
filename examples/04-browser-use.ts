@@ -42,7 +42,7 @@
  */
 
 import { eigIsDegenerate } from '../src/information-gain.ts';
-import { createClient } from '../src/client.ts';
+import { backendLabel, createClient } from '../src/client.ts';
 import type { SiteScript } from '../src/site/judges.ts';
 import { createJevJudge } from '../src/site/judges.ts';
 import type { WalkEvent, WalkResult } from '../src/site/walk.ts';
@@ -282,12 +282,13 @@ function summarise(result: WalkResult): void {
 // ---------------------------------------------------------------------------
 
 title('04 - Browser use: pick an element, never invent one');
-banner(createClient().live);
+const { live } = createClient();
+banner(live);
 
 for (const scenario of scenarios) {
   const judge = createJevJudge({ script: scenario.script });
 
-  console.log(`\n${bold(`${scenario.key}. ${scenario.name}`)}`);
+  console.log(`\n${bold(`${scenario.key}. ${live ? `live ${backendLabel()} on the example site` : scenario.name}`)}`);
   console.log(`  ${dim(TASK)}`);
 
   const result = await walk({
@@ -297,7 +298,7 @@ for (const scenario of scenarios) {
   });
 
   summarise(result);
-  console.log(note(scenario.point, 2));
+  if (!live) console.log(note(scenario.point, 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -306,8 +307,8 @@ console.log(`\n${bold('why a distribution and not an answer')}`);
 console.log(
   note(
     [
-      'A backtracks because the branch point was ranked rather than resolved. The path it resumes',
-      'from is mass the run had already been told about and kept. Collapse the same page to a single',
+      'The distribution ranks alternatives for backtracking, if this run needs them. A resumed path',
+      'comes from mass the run was told about and kept. Collapse the same page to a single',
       'answer and that alternative does not exist to return to: the beam is one wide, the first dead',
       'end is the last page, and the run ends where the maze says it ends.',
       '',

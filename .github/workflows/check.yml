@@ -39,9 +39,8 @@ jobs:
       # file it just executed.
       - run: npm run check
 
-      # The examples themselves, end to end. They run without an API key
-      # against scripted fixtures, which is what makes this runnable here.
-      - run: npm run all
+      # CI opts into fixtures explicitly; ordinary example commands call real Jev.
+      - run: npm run all:mock
 
       # README.md is assembled from docs/fragments/. This fails if it was
       # edited directly, or if a fragment's links no longer resolve.

@@ -1,7 +1,7 @@
 /**
  * The simulated driver, and the search loop both simulated examples run.
  *
- * Example 04 uses this so it runs with no browser and no API key. Example 06
+ * Example 04 uses this so it needs no browser, but still calls Jev. Example 06
  * runs *both* arms through it, which is what makes "same site, same loop, same
  * click mechanics, different decision model" a statement about the code rather
  * than a claim in a README.
@@ -55,7 +55,7 @@ export function describe(site: SitePage, history: readonly string[]) {
     candidates: Object.fromEntries(
       site.elements.map((element) => [element.id, `${element.role}: ${element.label}`]),
     ),
-    stepsTaken: history,
+    stepsTaken: [...history],
   };
 }
 

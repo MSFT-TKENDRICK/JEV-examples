@@ -2,25 +2,41 @@
 
 Working examples of [Jev](https://docs.typesafe.ai) — TypeSafe AI's "System One"
 evaluation model — using the official [`@typesafe-ai/sdk`](https://www.npmjs.com/package/@typesafe-ai/sdk),
-paired with the [Vercel AI SDK](https://ai-sdk.dev) and
-[AI Gateway](https://vercel.com/ai-gateway) for the generative half of an agent.
+routed through [Vercel AI Gateway's TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe).
+The [Vercel AI SDK](https://ai-sdk.dev) supplies the optional generative half.
 
-Examples 01–04 run right now, with no API key and no setup beyond `npm install`.
-Examples 05 and 06 drive a real Chrome and record it; they need a one-time
-browser download, so they are opt-in.
+The TypeScript examples call **live `typesafe-ai/jev` through Vercel by default**
+using `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`. Vercel's
+[catalog lists Jev input and output as Free](https://vercel.com/ai-gateway/models/providers/typesafe-ai)
+as of **2026-09-22**; authentication is still required. Missing credentials produce
+an error, not a simulated answer. No direct TypeSafe account key is needed or used.
+Example 05 additionally drives real Chrome and records it, so it needs a one-time
+browser download. Explicit fixture runs are available with `npm run all:mock`.
 
 ```bash
 npm install
-node examples/01-quickstart.ts
+cp .env.example .env             # PowerShell: Copy-Item .env.example .env
+# Edit .env: set AI_GATEWAY_API_KEY to your Vercel AI Gateway key.
+# Leave AI_GATEWAY_GENERATIVE unset: no paid generative calls by default.
+npm run quickstart
 ```
+
+**No Gateway access?** [`local-jev/`](local-jev/README.md) is an opt-in local
+server with the same `/v1/systemone` API, backed by the open
+[Laya](https://huggingface.co/convaiinnovations/laya) model on CPU. It is **not
+Jev**: `JEV_BACKEND=local` runs the same examples through the same SDK, and
+every banner, ledger and response names Laya. Its answers are Laya's, not a
+stand-in for Jev's.
 
 ### Jev vs a conventional generative agent
 
 Same maze, same driver, same click mechanics — only the decision model differs.
 [`06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) walks the fourteen-page
-site twice: once keeping the distribution, once collapsing it to the argmax a
-conventional `generateObject` agent would return. Run it with `npm run compare`;
-it prints both arms and the divergence between them.
+site twice: once using Jev's distribution, once using a single-answer
+`generateObject` control. Run it with `npm run compare`; it prints both arms and
+the divergence between them. The control stays a disclosed scripted replay unless
+you explicitly opt into potentially paid generation with `AI_GATEWAY_GENERATIVE=1`
+and Gateway credentials. It is not a controlled model-quality benchmark.
 
 The difference is not that one arm is faster. It is that the arm which keeps the
 distribution can rank an alternative, backtrack to it, and price a probe, and the
@@ -47,7 +63,13 @@ probability distributions attached.
 ```ts
 import { TypeSafeClient, choice, noul, score } from '@typesafe-ai/sdk';
 
-const client = new TypeSafeClient(); // reads TYPESAFE_API_KEY
+const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+if (!apiKey) throw new Error('Set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN');
+const client = new TypeSafeClient({
+  apiKey,
+  baseURL: 'https://ai-gateway.vercel.sh/typesafe',
+  defaultModel: 'typesafe-ai/jev',
+});
 
 const { answers } = await client.systemOne({
   state: { subject: 'Charged twice', body: '...' },
@@ -85,8 +107,11 @@ Two properties drive the whole design:
    answer A, that is a second request — and usually it is a branch in your code
    instead.
 
-It is cheap enough to put in a loop: **\$0.042 per 1M input tokens**, zero output
-tokens, because there is no output to generate.
+Vercel's [TypeSafe model catalog](https://vercel.com/ai-gateway/models/providers/typesafe-ai)
+lists **Free input and Free output** for `typesafe-ai/jev` as of 2026-09-22.
+That catalog price is not a guarantee about future pricing, account limits, other
+models or infrastructure costs. Paid generative models are not enabled merely by
+providing the Gateway credential used for Jev.
 
 ## What Jev is not
 
@@ -105,15 +130,32 @@ loop your code owns:
 
 Example 03 is built around that table.
 
+The deterministic checks are intentional: eligibility defines which actions may
+be considered, binding ties arguments to records, and verification checks effects.
+They do not replace Jev's semantic decision among eligible candidates. Its returned
+distribution drives the choice, whether to gather evidence, and which probe is
+worth trying next. Deterministic baselines remain useful comparisons, not substitutes
+silently selected when a Jev key is missing.
+
 ---
 
 ## The examples
+
+**Reading the excerpts:** the output and recording committed below were captured
+with scripted fixture responses, not live Jev. Run the default commands to obtain
+live decisions on the synthetic scenarios; those decisions and paths can differ.
+Set `JEV_MOCK=1` only when you want the reproducible fixture walkthroughs.
 
 <!-- fragment:01 -->
 
 ### 01 — Quickstart: one request, five questions, and what the answer does next
 
 [`examples/01-quickstart.ts`](examples/01-quickstart.ts) — run with `npm run quickstart`.
+
+This command uses live Jev through Vercel with `AI_GATEWAY_API_KEY` or
+`VERCEL_OIDC_TOKEN`. **The excerpts below
+are scripted fixture output**, reproduced with `JEV_MOCK=1`; live answers and
+routes can differ.
 
 Two habits, in order of importance.
 
@@ -203,9 +245,10 @@ sub-rubric over two 1.0-cost ones.
 
 #### Claims
 
-Everything runs offline against scripted fixtures in
+With explicit `JEV_MOCK=1`, this runs offline against scripted fixtures in
 [`src/mock-fetch.ts`](src/mock-fetch.ts), which manufacture HTTP responses on the
-published SDK's real code path. No API key is needed and no network call is made.
+published SDK's real code path. Only that mode needs no API key and makes no
+Jev network call. The shown distributions are fixtures, not live measurements.
 
 **This example may claim:** that the application's second question is a function of the
 first distribution; that expected-information-gain-per-cost selected between two
@@ -226,6 +269,11 @@ See [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md).
 ### 02 — Model-as-a-judge: when the judge is torn, it decomposes
 
 [`examples/02-judge-rubrics.ts`](examples/02-judge-rubrics.ts) — run with `npm run judge`.
+
+This command uses live Jev through Vercel with `AI_GATEWAY_API_KEY` or
+`VERCEL_OIDC_TOKEN`. **The excerpts below
+are scripted fixture output**, reproduced with `JEV_MOCK=1`; live scores and
+decisions can differ.
 
 Five candidate answers to the same support question are scored against three weighted
 rubric dimensions and two hard safety gates. The part worth reading is what happens when
@@ -351,9 +399,10 @@ that a generative system cannot probe. One can be built to — just not from thi
 
 #### Claims
 
-Everything runs offline against scripted fixtures in
+With explicit `JEV_MOCK=1`, this runs offline against scripted fixtures in
 [`src/mock-fetch.ts`](src/mock-fetch.ts), which manufacture HTTP responses on the
-published SDK's real code path. No API key is needed and no network call is made.
+published SDK's real code path. Only that mode needs no API key and makes no
+Jev network call. The shown distributions are fixtures, not live measurements.
 
 **This example may claim:** that two weightings of the same measurements produce different
 rankings; that hard gates catch what no weighting would; that the verdict distribution is
@@ -380,8 +429,13 @@ See [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md).
 npm run harness
 ```
 
-Runs offline with no API key. Every distribution below is manufactured by
-`src/mock-fetch.ts` and replayed through the real `@typesafe-ai/sdk` code path;
+Uses live Jev through Vercel by default with `AI_GATEWAY_API_KEY` or
+`VERCEL_OIDC_TOKEN`. Live generative triage additionally requires explicit
+`AI_GATEWAY_GENERATIVE=1` and can incur charges; otherwise it remains replayed.
+Set `JEV_MOCK=1`
+explicitly for the no-key fixture run. **Every distribution below is fixture
+output**, manufactured by `src/mock-fetch.ts` and replayed through the real
+`@typesafe-ai/sdk` code path;
 the generative triage arm is `generateObject` against `MockLanguageModelV4` from
 `ai/test`. The entropy and expected-gain arithmetic over those distributions is
 real. The probe set, the probe costs and the partitions are authored in
@@ -600,15 +654,17 @@ candidate set on every page is the page's own elements and uncertainty selects
 the next *machine* action rather than a person.
 
 ```bash
-node examples/04-browser-use.ts
+npm run browser
 ```
 
-**This is a scripted offline fixture.** No live TypeSafe API call is made. Every
-distribution is predetermined in the example's script and replayed through
+The command calls **live Jev through Vercel by default**, using
+`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`.
+**The excerpts below are scripted offline fixture output**, reproduced by setting
+`JEV_MOCK=1`. In that mode every distribution is predetermined and replayed through
 [`src/mock-fetch.ts`](src/mock-fetch.ts), so the real SDK code path runs
 against manufactured HTTP responses. The site, the confusable labels, the probe
 costs and the depth of the trap were all authored here — which means the
-difficulty was authored too. The run demonstrates what the application does with
+difficulty was authored too. The fixture run demonstrates what the application does with
 a distribution. It does not demonstrate that the distribution deserves trust.
 
 #### What it may be read as showing
@@ -737,13 +793,15 @@ fourteen-page site rendered to disk, recorded with
 [`webreel`](https://www.npmjs.com/package/webreel).
 
 ```bash
-node examples/05-browser-live.ts             # record to docs/media/browser-use.mp4
-node examples/05-browser-live.ts --no-video  # drive the browser, skip the recording
+npm run record                 # record to docs/media/browser-use.mp4
+npm run record -- --no-video    # drive the browser, skip the recording
 ```
 
-**The judgement is still a scripted offline fixture unless `TYPESAFE_API_KEY` is
-set.** With a key it makes live calls; without one it replays the same script
-example 04 uses, through [`src/mock-fetch.ts`](src/mock-fetch.ts). What is
+**Judgements use live Jev through Vercel by default**, using `AI_GATEWAY_API_KEY`
+or `VERCEL_OIDC_TOKEN`. Only
+explicit `JEV_MOCK=1` replays the same script example 04 uses, through
+[`src/mock-fetch.ts`](src/mock-fetch.ts). **The committed recording and
+excerpts below use those scripted judgements, not live Jev.** What is
 real either way is the browser: real page loads from `examples/site`, the cursor
 moving to the element the policy chose, real typing into the re-issue form, and
 values read back out of the DOM to verify. The site was authored to be hard, so
@@ -767,7 +825,7 @@ authored in this repository.
 
 Every arrival compares the live element list and the filename against
 [`src/site/graph.ts`](src/site/graph.ts) and **throws on mismatch**, so the
-live example cannot silently degrade into the offline fixture:
+browser driver cannot silently substitute the synthetic driver:
 
 ```
   step 2  documents.html
@@ -784,7 +842,7 @@ synthetic one then clicked whatever occupied those coordinates on the page that
 had just loaded — two pages per click. The driver now moves the cursor for the
 recording and follows the element's own `href`.
 
-#### Real output from a real run
+#### Fixture output from a real browser run
 
 ```
   step 4  archive-2025.html
@@ -827,7 +885,19 @@ The commit, with the form filled and read back through CDP:
 
 #### The recording
 
-The run above writes `docs/media/browser-use.mp4`. If webreel cannot obtain
+`npm run record` writes `docs/media/browser-use.mp4` using live Jev by default.
+The **checked-in recording uses explicit `JEV_MOCK=1` fixture responses**. To
+regenerate that fixture recording without Gateway credentials:
+
+```bash
+JEV_MOCK=1 npm run record
+```
+
+In PowerShell, set `$env:JEV_MOCK = '1'`, run `npm run record`, then
+`Remove-Item Env:JEV_MOCK` before returning to live use. The recording shows
+browser execution under scripted decisions, not evidence of hosted Jev inference.
+
+If webreel cannot obtain
 `ffmpeg` the example says so and keeps going — you lose the video, not the result:
 
 ```
@@ -845,20 +915,34 @@ at 60.
 ### 06 — The same maze, twice
 
 [`examples/06-jev-vs-control.ts`](examples/06-jev-vs-control.ts) — the same
-fourteen-page maze, the same decision loop, the same judgements, walked twice:
+fourteen-page maze and the same decision loop, walked twice:
 once by an arm that keeps the whole distribution, once by an arm that keeps one
 answer.
 
 ```bash
-node examples/06-jev-vs-control.ts
+npm run compare
 ```
 
-**This is a scripted offline fixture, and the control arm is an adversarial
-fixture rather than a fair benchmark.** Its replies are replayed, not generated,
-and they were written here. A competent generative implementation constrained the
+The Jev arm calls Vercel's live TypeSafe-compatible API by default with
+`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`. The generative control stays a
+disclosed scripted replay unless `AI_GATEWAY_GENERATIVE=1` explicitly enables
+potentially paid Gateway generation. Credentials for free Jev alone do not enable
+it. `JEV_MOCK=1` explicitly makes both arms fixtures.
+
+**The excerpts below are scripted offline fixture output, and that control arm
+is an adversarial fixture rather than a fair benchmark.** Its replies are
+replayed, not generated, and they were written here. Live arms can receive
+different judgements; their outcome gap is not an isolated interface comparison.
+A competent generative implementation constrained the
 same way could pass the same checks. The claim being made is narrow and is about
 *what a bare point estimate supplies to an application*, not about which model is
 better.
+
+The control is an independent generative call or replay, not Jev's answer with
+its probabilities removed. Separately, the arithmetic demonstration compares the
+first distribution returned to the Jev arm with its point-mass version. That
+calculation uses the current run's response, not a fixed fixture prior. The output
+quoted below remains the historical fixture capture, not a hosted API result.
 
 #### What it may be read as showing
 
@@ -960,13 +1044,16 @@ The binding list of permitted claims is
 LangChain's TypeSafe integration is **Python-only**; there is no
 `@langchain/typesafe` on npm.
 
-> **These two files have never been executed.** There was no Python environment
-> and no API key in the build environment, so they are reference implementations
-> read from the published `langchain-typesafe` API, not verified runs. Treat
-> them as a starting point and expect to adjust.
+> **No live Python results are published here.** These integrations use the
+> published `langchain-typesafe` API; they are not fixture-backed alternatives to
+> the TypeScript examples. Live behaviour still needs validation.
 
-They need `TYPESAFE_API_KEY`, and `langchain_harness.py` additionally needs a
-generative provider (`OPENAI_API_KEY` as written). Neither runs offline.
+They use Gateway credentials (`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`) for Jev,
+not a direct TypeSafe key. Only `langchain_harness.py` additionally requires
+`OPENAI_API_KEY`: running that harness invokes separate, potentially paid OpenAI
+generation. A Gateway credential alone does not enable it, and the free Jev
+catalog entry does not cover those OpenAI calls. The TypeScript
+`AI_GATEWAY_GENERATIVE=1` switch does not control this Python provider.
 
 - [`judge_rubric.py`](examples/python/judge_rubric.py) — the rubric judge from
   example 02, using `TypeSafeClassifier` with `Score`, `Noul` and `Choice`.
@@ -997,7 +1084,7 @@ paragraph but a wrongly frozen card or a wrongly touched production system.
 Both are written to a stricter standard than examples 01–06, recorded in
 [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md) and
 [`docs/FSI-BOUNDARIES.md`](docs/FSI-BOUNDARIES.md): every decision is written to
-a JSONL ledger, every run is labelled as scripted, and no example is permitted
+a JSONL ledger, each run identifies its live or scripted mode, and no example is permitted
 to claim a distribution deserves trust — only to show what the surrounding
 application does with one.
 
@@ -1012,6 +1099,13 @@ npm run fsi:eval
 ### 07 — Uncertainty selects the next machine action
 
 `npm run fsi:07`
+
+This command uses live Jev through Vercel by default with `AI_GATEWAY_API_KEY`
+or `VERCEL_OIDC_TOKEN`.
+**All excerpts below are scripted fixture output**, obtained with explicit
+`JEV_MOCK=1`, not evidence of live Jev decisions or calibration.
+Authority records, probes, action effects and injected operational failures remain
+synthetic in both modes. Live mode changes the Jev answers, not the simulated bank.
 
 A card-servicing workflow. Deterministic code reads the records, computes which
 steps are even eligible, and only then asks Jev which eligible step comes next.
@@ -1180,7 +1274,7 @@ probing in this example is downstream of the distribution existing at all.
 
 #### What this does and does not show
 
-Offline runs use scripted fixtures through `src/mock-fetch.ts`, which exercises
+Explicit `JEV_MOCK=1` runs use scripted fixtures through `src/mock-fetch.ts`, which exercises
 the real SDK code path with manufactured HTTP responses. The distributions above
 were written by hand, and so were the probe costs and the partitions that decide
 what each observation points towards. **The example proves what the application
@@ -1223,14 +1317,20 @@ next. Never a person.
 npm run fsi:08
 ```
 
-**Everything in this example is a scripted offline fixture.** The incidents, the
-spool text, the CMDB, the flow snapshot, both runbook catalogs, the diagnostic
-costs and — importantly — the model's answers and probability distributions are
-all manufactured. Nothing calls the TypeSafe API unless `TYPESAFE_API_KEY` is set
-and `JEV_MOCK` is not `1`, and the fault fixtures stay offline even then. The run
-demonstrates control flow and arithmetic, not model accuracy.
+The command uses **live Jev through Vercel by default** with `AI_GATEWAY_API_KEY`
+or `VERCEL_OIDC_TOKEN`.
+The incidents, spool text, CMDB, flow snapshot, runbook catalogs and diagnostic
+costs remain synthetic. Only explicit `JEV_MOCK=1` substitutes scripted model
+answers and distributions. Injected timeout and malformed-response transports
+also run only in that explicit fixture mode; a live run does not silently
+substitute them for Jev. Fault-labelled incidents are not skipped in live mode:
+they use the configured SDK transport like the other residual incidents.
+Operational interruptions and verification failures remain synthetic safety-harness
+fixtures in both modes; they do not manufacture Jev's live answers.
 
-Every code block below is copied from a real `npm run fsi:08` run. They are
+**Every output block below is a scripted fixture capture**, from a run with
+`JEV_MOCK=1`, not a live TypeSafe response. These demonstrate control flow and
+arithmetic, not model accuracy. They are
 excerpts — intermediate lines are elided for length — but no quoted line has
 been edited.
 
@@ -1400,8 +1500,9 @@ them at runtime, so the application validates before trusting any field.
 
 Expected information gain is `H(prior) - E[H(posterior)]`. For a point mass,
 `H(prior) = 0`, and the posterior under any observation is the same point mass.
-Every term is zero, for every diagnostic. The run demonstrates this on a real
-prior from earlier in the same run rather than asserting it:
+Every term is zero, for every diagnostic. The fixture run demonstrates this on a
+scripted prior from earlier in the same run rather than asserting it. The word
+"real" in the captured line below means used by that run, not returned by live Jev:
 
 ```
 INC-4479's real first judgement, and the same judgement collapsed to its argmax
@@ -1501,7 +1602,8 @@ show, and cannot show, that the distribution deserves trust.
 Both examples gate on the same three distribution statistics, with numbers
 chosen by their authors. `npm run fsi:eval` runs both examples as subprocesses,
 reads their ledgers back, and re-scores every recorded decision against a sweep
-of thresholds. Nothing in either pipeline is reimplemented to do it.
+of thresholds. This evaluation intentionally uses scripted fixtures, not live
+Jev responses. Nothing in either pipeline is reimplemented to do it.
 
 The table trades acting against investigating, which is the ordinary reason to
 sweep a threshold. The column that matters is the last one: decisions that
@@ -1541,9 +1643,20 @@ labels in both examples are recorded as priors committed before the run, and
 they are explicitly not treated as ground truth.
 
 [`perturb.ts`](examples/fsi/eval/perturb.ts) is the live counterpart — it
-measures how a real distribution moves when a spurious option is added or a
-correct one removed, which is the question the offline sweep cannot ask. **It
-has never been run**, for the same reason as everything else here.
+holds a synthetic scenario's state and question fixed while measuring a baseline,
+adding a spurious option, removing an unselected option and reordering the options.
+It emits the returned distributions and raw shared-option mass deltas; it does not
+execute the recommended actions. Removal changes normalization, and one sample per
+variant cannot separate sampling variation from option-set effects. This is not
+an accuracy score or a pass/fail stability test. No live perturbation results are
+published here.
+
+It requires `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` and rejects `JEV_MOCK=1`. After configuring
+`.env` for live use, run:
+
+```bash
+node --env-file-if-exists=.env examples/fsi/eval/perturb.ts
+```
 
 ---
 
@@ -1551,13 +1664,18 @@ has never been run**, for the same reason as everything else here.
 
 ```bash
 npm install
-node examples/01-quickstart.ts   # or: npm run quickstart
-npm run all                      # examples 01–04 and the FSI set, in order
+cp .env.example .env             # PowerShell: Copy-Item .env.example .env
+# Edit .env: set AI_GATEWAY_API_KEY, leave JEV_MOCK unset for live Jev.
+# Leave AI_GATEWAY_GENERATIVE unset to keep optional paid models disabled.
+npm run quickstart
+npm run all                     # live Jev: 01–04, 06, FSI; plus the fixture eval
+npm run all:mock                # explicit offline fixture run, no API key needed
 
 npm run fsi:07                   # bounded next-step recommendation
 npm run fsi:08                   # residual incident runbook routing
-npm run fsi:eval                 # threshold sweep over both ledgers
-npm run check:foundation         # 21 assertions over src/ledger.ts
+npm run fsi:eval                 # fixture-only threshold sweep over both ledgers
+npm run check:client             # validate client mode selection without live calls
+npm run check:foundation         # shared-kernel checks
 
 npm run record                   # 05: real Chrome, recorded
 npm run compare                  # 06: Jev vs a control model, side by side
@@ -1568,8 +1686,8 @@ There is no build step. The examples are `.ts` files executed directly by
 published SDKs — `@typesafe-ai/sdk`, `ai`, `@ai-sdk/gateway` and `zod` — and
 nothing in `src/` reimplements any of them.
 
-`npm run all` deliberately stops short of 05 and 06 so the repo keeps its
-clone-and-run property. Those two add `webreel`, which downloads Chrome and
+`npm run all` excludes only example 05. Example 06 is a terminal comparison and
+does not launch Chrome. Example 05 uses `webreel`, which downloads Chrome and
 ffmpeg into `~/.webreel` on first use.
 
 > **Known upstream issue.** webreel 0.1.4 requests an ffmpeg build
@@ -1581,28 +1699,53 @@ ffmpeg into `~/.webreel` on first use.
 > [`src/chrome-launch.ts`](src/chrome-launch.ts) starts the same binary without
 > those two flags and explains why.
 
-### Offline by default, live with one env var
+### Live Jev by default, fixtures by explicit opt-in
 
-Without a key, the examples inject a mock `fetch` into the real
-`TypeSafeClient` ([`src/mock-fetch.ts`](src/mock-fetch.ts)) and a
-`MockLanguageModelV4` from `ai/test` into the real `generateObject` call. The
-SDKs' request building, retries and error handling all stay on the live code
-path; only the HTTP response bodies are manufactured.
+The npm example scripts load `.env` with Node's `--env-file-if-exists=.env`.
+Copy [`.env.example`](.env.example) to `.env`, set `AI_GATEWAY_API_KEY` (or
+`VERCEL_OIDC_TOKEN`), and leave `JEV_MOCK` unset. The shared client sends
+`typesafe-ai/jev` requests to `https://ai-gateway.vercel.sh/typesafe`.
+Without Gateway credentials it fails with a setup error; it neither switches to
+scripted responses nor falls back to a direct TypeSafe key or endpoint.
+
+`npm run all:mock` explicitly sets `JEV_MOCK=1` for the fixture suite. To run just
+one fixture, export `JEV_MOCK=1` in your shell (PowerShell:
+`$env:JEV_MOCK = '1'`) and run its npm command. Unset it before returning to live
+Jev (PowerShell: `Remove-Item Env:JEV_MOCK`). This opt-in overrides a configured
+Gateway credential. The fixture-only threshold sweep and fault-injection checks do not
+measure live Jev.
+
+Live FSI service failures or unusable answers fail closed, retain the refusal
+ledger, and exit nonzero with an error. A valid model abstention is not a service
+failure; expected injected failures in fixture runs also keep a successful exit.
+
+In fixture mode the examples inject a mock `fetch` into the real
+`TypeSafeClient` ([`src/mock-fetch.ts`](src/mock-fetch.ts)). The SDK's request
+building and error handling still run; only the HTTP responses are manufactured.
 
 Note that the SDK does **not** runtime-validate responses — it parses JSON and
 returns it. So the mock's fidelity is guaranteed by its TypeScript types and by
 review, not by the SDK rejecting a wrong shape.
 
-With a key, the exact same code calls the real services:
+Direct `node examples/...` invocations do **not** load `.env` automatically.
+Either add `--env-file-if-exists=.env` yourself or export credentials first:
 
 ```bash
-export TYPESAFE_API_KEY=...       # get one at typesafe.ai
-export AI_GATEWAY_API_KEY=...     # only needed for example 03's proposer
+export AI_GATEWAY_API_KEY=...     # your Vercel AI Gateway key
 node examples/01-quickstart.ts
 ```
 
-`JEV_MOCK=1` forces the mocks even with keys. The SDK also honors
-`TYPESAFE_BASE_URL`, `TYPESAFE_DEFAULT_MODEL` and `TYPESAFE_LOG_LEVEL` — see
+The generative half is separate and **defaults to disclosed scripted replay**.
+Supplying the Gateway credential needed for free Jev does not enable paid models.
+Only explicit `AI_GATEWAY_GENERATIVE=1` opts the TypeScript proposer, triager and
+control into live Gateway generation; those models can incur charges. A live Jev
+run alone is not a live generative-model comparison. `JEV_MOCK=1` forces all those
+arms back to fixtures even if generation was opted in.
+
+`AI_GATEWAY_TYPESAFE_BASE_URL` is an optional endpoint override for a loopback
+test or private proxy. It is not a fallback to TypeSafe's direct API.
+`TYPESAFE_DEFAULT_MODEL` defaults to `typesafe-ai/jev`; overriding it changes the
+model and may change pricing. `TYPESAFE_LOG_LEVEL` also remains available. See
 [`.env.example`](.env.example).
 
 **Two honest caveats about the mock.**
@@ -1614,13 +1757,11 @@ the argmax. It has never been checked against a captured live response, so
 "matches the published types" is the strongest claim available, not "matches
 production".
 
-It also approximates confidence as `1 - normalizedEntropy`. That makes
-low-option-count questions look under-confident: a 83/17 split reports 34.2%,
-and the 52/30/12/6 split in example 01 reports 18.9% — which is *why* that
-example routes to triage instead of auto-routing. Real Jev calibrates
-confidence differently, so read that particular outcome as a demonstration of
-the threshold mechanism, not as a prediction of what Jev would decide. Do not
-port the formula.
+It also approximates confidence as `1 - normalizedEntropy`. For example, an
+83/17 split reports 34.2%. This is an authored heuristic, not a measurement of
+Jev's confidence semantics or calibration. Read fixture outcomes as demonstrations
+of the policy, not predictions of what live Jev would decide. Do not port the
+formula as a calibration rule.
 
 Score targets are also hit to within ~0.002 rather than exactly, because the
 mock caps its peak mass at 0.999 and rounds the emitted distribution.
@@ -1630,7 +1771,7 @@ mock caps its peak mass at 0.999 and rounds the emitted distribution.
 ## Repo layout
 
 ```
-src/client.ts         createClient() — real TypeSafeClient, mock fetch when offline
+src/client.ts         createClient() — Jev via Vercel compatibility API; explicit mocks
 src/mock-fetch.ts     offline Fetch answering POST /v1/systemone
 src/proposer.ts       the AI SDK half: generateObject + gateway, MockLanguageModelV4 offline
 src/control-agent.ts  the control arm for example 06: generateObject browsing policy
@@ -1668,19 +1809,22 @@ recording, cursor overlays and encoding.
 it exists only because no published package simulates Jev's `/v1/systemone`
 responses. It is test infrastructure, not part of the live path.
 
-### About `experimental_evaluate`
+### Jev through Vercel, without changing SDKs
 
-The AI SDK has a first-class evaluation API, `experimental_evaluate`, which is
-documented and merged in `vercel/ai` — but **not in a published release**.
-`ai@7.0.101` does not export it, `@ai-sdk/gateway@4.0.81` has no
-`evaluationModel`, and `@ai-sdk/typesafe-ai` is not resolvable. So Jev is called
-through its own SDK, and the AI Gateway is used for what it can do today:
-generation. When the export ships, the question and answer shapes map
-one-to-one — [`docs/SDKS.md`](docs/SDKS.md) has the table.
+[Vercel's supported TypeSafe-compatible route](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe)
+accepts the existing `@typesafe-ai/sdk` client at
+`https://ai-gateway.vercel.sh/typesafe`, with Gateway credentials and
+`typesafe-ai/jev`. That is the live path used here, not the direct TypeSafe API.
 
-**Not verified here:** no request in this repo has been run against the live
-TypeSafe API or the live Gateway — there was no API key in the build
-environment.
+Vercel also documents [evaluation through the AI SDK and HTTP API](https://vercel.com/docs/ai-gateway/modalities/evaluation).
+Those are alternatives, not prerequisites for this repository's compatibility
+route. We do not depend on `experimental_evaluate` or infer Gateway availability
+from whether a particular installed AI SDK version exports it.
+[`docs/SDKS.md`](docs/SDKS.md) explains the supported route and naming differences.
+
+**Not established by the published examples:** live TypeSafe or Gateway quality,
+calibration, latency, or reliability. The committed excerpts are fixture captures,
+not live measurements.
 
 ---
 
@@ -1688,7 +1832,7 @@ environment.
 
 This repo is deliberately narrow. It shows Jev used through the published `@typesafe-ai/sdk`, with ordinary TypeScript code building a bounded question, receiving a distribution, and applying an abstention or probe-selection rule outside the model. That is real application control flow. It is not evidence that the returned distribution is correct, calibrated, stable, or safe to automate in a bank.
 
-The most important caveat is also the simplest: **nothing in this repository has ever been run against the live TypeSafe API.** No API key was used to produce anything you see here. Every Choice, Score, Noul, probability table, example output, and recording shown here is driven by manufactured responses from [`src/mock-fetch.ts`](src/mock-fetch.ts). The mock exercises the SDK request path and the surrounding policy code; it also manufactures both the selected answer and the shape of the distribution. An offline run proves the harness behaves under scripted model outputs. It does not tell you how the real service answers, how confident it is, how long it takes, or how often it is available.
+The most important evidence boundary is simple: **the committed output excerpts and recording use scripted responses, not live TypeSafe results.** The default commands now call live Jev; that does not turn the old fixture captures into empirical evidence. [`src/mock-fetch.ts`](src/mock-fetch.ts) manufactures both the selected answer and the shape of the distribution. A fixture run proves the harness behaves under scripted outputs. It does not tell you how the real service answers, how confident it is, how long it takes, or how often it is available.
 
 The full FSI boundary document is [`docs/FSI-BOUNDARIES.md`](docs/FSI-BOUNDARIES.md). The README version is shorter because an architect who has read the examples mainly needs to know where the line is.
 
@@ -1697,7 +1841,7 @@ Open questions before this pattern belongs near production:
 1. **Deployment and data handling.** This repo does not answer where request state is processed, which regions are used, what is retained, whether inputs are used for training, which subprocessors can see them, how support access works, or how deletion and encryption are enforced.
 2. **Input classification and minimization.** The examples pass compact state objects. They do not decide whether real transaction records, account identifiers, payment narratives, customer text, spool logs, hostnames, or operational metadata may be sent to a third-party service at all.
 3. **Probability semantics.** The strongest objection is fair: a model-produced distribution is still a model output, so why trust its shape more than its argmax? Treating a flat distribution as ambiguous is a useful heuristic. It becomes a safety property only after showing, on representative data, that confidence correlates with correctness, calibration survives service updates, high-confidence errors are rare enough, and thresholds are not invalidated by adding, removing, reordering, or rewording the option set. None of that evidence is here.
-4. **Evidence beyond fixtures.** The FSI examples can show what the policy would do for scripted confident, ambiguous, malformed, timeout, and fallback cases, and [`examples/fsi/eval/`](examples/fsi/eval) can show how that policy's behaviour moves as its thresholds move. Both operate over manufactured distributions. They do not measure model quality, risk coverage, service reliability, or live cost.
+4. **Evidence beyond fixtures.** Explicit FSI fixture runs show what the policy would do for scripted confident, ambiguous, malformed, timeout, and fallback cases, and [`examples/fsi/eval/`](examples/fsi/eval) shows how that policy's behaviour moves as its thresholds move. Those measurements use manufactured distributions. Live example runs exercise Jev decisions on synthetic scenarios; they are not a representative evaluation of model quality, risk coverage, service reliability, or live cost.
 5. **Degraded operation.** The examples include fail-closed branches, but not production timeout budgets, retry policy, idempotency keys, duplicate-request handling, circuit breakers, fallback UX, or queue operations when the service is slow or unavailable.
 6. **Change governance.** Candidate catalogs, thresholds, eligibility rules, prompt wording, SDK versions, and service versions are all control surfaces. This repo does not define who approves changes, how they are tested, how rollback works, or how evidence is retained.
 7. **Automation bias, and what replaced it.** Escalation to a human is not automatically a control: reviewers anchor on the preselected answer, rubber-stamp queues under load, or lack the evidence needed to disagree. These examples do not have that failure mode, because they never route to a person — but the converse is now true and is the sharper limitation. There is no human in these loops at all, so the only things standing between a confident wrong distribution and an executed action are the deterministic preconditions and the compensating saga. Both are code in this repo, written by the same authors as the thing they check. Removing the reviewer removed the reviewer's rubber stamp and the reviewer's veto together.
@@ -1705,7 +1849,7 @@ Open questions before this pattern belongs near production:
 9. **Baseline comparison.** The repo does not prove this pattern is better than rules, search, existing classifiers, metadata lookups, or asking an operator. In some domains the deterministic baseline is the right answer.
 10. **Threat model.** Bounded output prevents Jev from inventing a new option. It does not prevent malicious or stale input from shifting probability toward a harmful option that your code made eligible.
 
-Those gaps do not invalidate the examples. They define what the examples are: SDK wiring, bounded option construction, deterministic eligibility checks, abstention policies, fallbacks, and ledgers around scripted distributions. The missing work is the empirical and operational evidence required to trust the distribution in a regulated workflow.
+Those gaps do not invalidate the examples. They define what the examples are: live Jev decision integrations with bounded option construction, deterministic eligibility checks, abstention policies, fallbacks, and ledgers, plus explicit scripted fixtures for repeatable checks. The missing work is the empirical and operational evidence required to trust the distribution in a regulated workflow.
 
 ---
 
@@ -1731,6 +1875,9 @@ Those gaps do not invalidate the examples. They define what the examples are: SD
 
 - [TypeSafe docs](https://docs.typesafe.ai) — primitives, patterns, API reference
 - [Jev on the Vercel AI Gateway](https://vercel.com/ai-gateway/models/jev)
+- [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe) — endpoint and authentication
+- [Vercel TypeSafe model catalog](https://vercel.com/ai-gateway/models/providers/typesafe-ai) — Free input/output listing checked 2026-09-22
+- [Vercel evaluation API](https://vercel.com/docs/ai-gateway/modalities/evaluation) — supported AI SDK and HTTP alternatives
 - [AI SDK evaluation docs](https://ai-sdk.dev/docs/ai-sdk-core/evaluation) and
   [`experimental_evaluate` reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/evaluate)
 - [`vercel/ai` evaluate examples](https://github.com/vercel/ai/tree/main/examples/ai-functions/src/evaluate)

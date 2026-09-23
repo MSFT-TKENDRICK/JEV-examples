@@ -1,17 +1,17 @@
 /**
- * The decision models the walk can be driven by.
+ * The Jev decision model used by browser examples 04-06.
  *
- * Both arms in example 06 come from here, so the difference between them is a
- * difference in what the model returns and nothing else. Same site, same loop,
- * same click mechanics.
+ * The independent generative control in src/control-agent.ts implements the
+ * same Judge interface: same site, loop and click mechanics.
  */
 
-import { createClient } from '../client.ts';
+import { createClient, isLiveJev } from '../client.ts';
 import type { ScriptedAnswer } from '../mock-fetch.ts';
 import { buildQuestions } from '../browser-policy.ts';
 import type { Signals } from '../browser-policy.ts';
 import type { SitePage } from './graph.ts';
 import type { Judge } from './walk.ts';
+import { describe } from './walk.ts';
 
 /** Scripted answers per page id, for the offline fixtures. */
 export type SiteScript = Record<string, Record<string, ScriptedAnswer>>;
@@ -31,31 +31,19 @@ export interface JevJudgeOptions {
  */
 export function createJevJudge(options: JevJudgeOptions): Judge & { live: boolean } {
   const beamWidth = options.beamWidth ?? 3;
-  let live = false;
+  const live = isLiveJev();
 
   return {
     label: options.label ?? 'Jev',
     detail: `distribution over page elements, beam width ${beamWidth}`,
     beamWidth,
-    get live() {
-      return live;
-    },
+    live,
     async judge(site: SitePage, history: readonly string[]) {
       const questions = buildQuestions(site.elements);
-      const scripted = options.script[site.id] ?? {};
-      const { client, live: isLive } = createClient(() => scripted);
-      live = isLive;
+      const { client } = createClient(() => options.script[site.id] ?? {});
 
       const { answers } = await client.systemOne({
-        state: {
-          task: site.title,
-          url: site.file,
-          visibleText: site.text,
-          candidates: Object.fromEntries(
-            site.elements.map((element) => [element.id, `${element.role}: ${element.label}`]),
-          ),
-          stepsTaken: [...history],
-        },
+        state: describe(site, history),
         questions,
       });
 

@@ -45,6 +45,7 @@ async function main(): Promise<void> {
     note([
       'Both examples are run as subprocesses and their decision ledgers read',
       'back, so nothing about their pipelines or policies is reimplemented here.',
+      'The sweep always sets JEV_MOCK=1, regardless of your key or current mode.',
     ]),
   );
 
@@ -228,7 +229,8 @@ async function main(): Promise<void> {
       'above the gain multiplier means the ranking is not paying for itself on',
       'these fixtures, and the run prints that rather than hiding it.',
       '',
-      'The live instrument is examples/fsi/eval/perturb.ts. It has never been run.',
+      'The separate live instrument is examples/fsi/eval/perturb.ts.',
+      'No live result is collected or claimed by this offline sweep.',
     ])}`,
   );
 }

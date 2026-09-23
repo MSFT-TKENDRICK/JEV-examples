@@ -23,7 +23,7 @@
  * selection. That it prevents hallucination. That bounded options imply a
  * correct or harmless choice. That this pattern safely automates card freezes or
  * dispute filing, or reduces fraud loss, handling time or clarification turns.
- * That anything here demonstrates live API behaviour, latency, cost or
+ * That an offline run demonstrates live API behaviour, latency, cost or
  * reliability. That the probes are the right probes, or that their costs and
  * partitions resemble any real institution's.
  *
@@ -38,8 +38,8 @@
  *
  * ## What is scripted
  *
- * Everything the model does. `src/mock-fetch.ts` manufactures the selected
- * option *and the shape of the distribution* for all eight fixtures, and the
+ * Only with `JEV_MOCK=1`, `src/mock-fetch.ts` manufactures the selected
+ * option *and the shape of the distribution*. Otherwise Jev answers live. The
  * probe partitions and costs in `probes.ts` were written by hand. So a run shows
  * what the application does with a distribution, and cannot show that a
  * distribution deserves trust.
@@ -50,7 +50,7 @@
 import { VERSION } from '@typesafe-ai/sdk';
 import type { Authority } from '../../../src/authority.ts';
 import { createAuthority } from '../../../src/authority.ts';
-import { createClient } from '../../../src/client.ts';
+import { isLiveJev } from '../../../src/client.ts';
 import { runPlan, validatePlan } from '../../../src/compensate.ts';
 import { fixtureBanner, runMode } from '../../../src/fixture-label.ts';
 import { assess, eigIsDegenerate, entropy, posterior, selectProbe } from '../../../src/information-gain.ts';
@@ -101,13 +101,14 @@ import type { SummaryRow } from './report.ts';
 import { CARD_IN_SCOPE, SCENARIOS, seed } from './scenarios.ts';
 import type { Scenario } from './scenarios.ts';
 
-const { live } = createClient();
+const live = isLiveJev();
 
 // A hard failure, before any fixture runs. If a probe ever costs as much as
 // acting, the example is arguing for itself dishonestly and should not run.
 assertProbesAreCheap();
 
 fixtureBanner(live);
+console.log(dim('Customer records, probe observations and action effects are fixtures in both modes; no real banking operations run.'));
 title('07 — Uncertainty selects the next machine action');
 console.log(
   note(
@@ -126,7 +127,7 @@ console.log(
 const ledger = createLedger({
   component: 'fsi-07-next-step',
   mode: runMode(live),
-  service: { model: 'jev-latest', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
+  service: { model: 'unknown (no response yet)', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
   // A scripted run is a fixture, and `runId` feeds `planDigest`. With a random
   // id the digests differ on every run, so no document could quote one and no
   // reader could reproduce it. The clock is pinned for the same reason. A live
@@ -255,6 +256,7 @@ for (const scenario of SCENARIOS) {
           );
         }
         ledger.record({
+          service: { model: arm.modelId, sdkPackage: 'ai/test', sdkVersion: 'fixture' },
           state: stateReference(buildState(context), FIELDS_WITHHELD),
           candidates: {
             source: eligibility.source,
@@ -301,7 +303,12 @@ for (const scenario of SCENARIOS) {
           : null;
 
       if (recommendation.failure) {
-        console.log(`  ${red('service')} ${dim(recommendation.failure)}`);
+        if (live) {
+          process.exitCode = 1;
+          console.error(`  ${red('live Jev request failed')} ${dim(recommendation.failure)}`);
+        } else {
+          console.log(`  ${red('service')} ${dim(recommendation.failure)}`);
+        }
       } else {
         console.log(`\n  ${bold('jev recommends')} ${cyan(recommendation.choice ?? '(nothing)')}`);
         printDistribution(recommendation.probabilities, metrics);
@@ -412,6 +419,7 @@ for (const scenario of SCENARIOS) {
       execution?: Parameters<typeof ledger.record>[0]['execution'],
     ): void {
       ledger.record({
+        service: { model: recommendation.model || 'unknown', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
         state: stateReference(buildState(context), FIELDS_WITHHELD),
         candidates: candidateProvenance,
         recommendation: recommendationRecord,
@@ -477,6 +485,11 @@ for (const scenario of SCENARIOS) {
         `\n  ${bold('stage two')} ${dim(`${slot.name}: ${candidates.length} candidate ${slot.recordType}(s) from the records`)}`,
       );
       const selected = await selectCandidate(candidates, slot.description, context, argumentScript());
+      latencyMs += selected.latencyMs;
+      if (selected.failure && live) {
+        process.exitCode = 1;
+        console.error(`  ${red('live Jev argument request failed')} ${dim(selected.failure)}`);
+      }
       if (selected.choice === null || selected.choice === NONE_OF_THESE) {
         console.log(`  ${red('REFUSE')} ${dim('no candidate record matched; nothing changed')}`);
         close(NO_ACTION, 'refused');
@@ -572,7 +585,7 @@ console.log(
   note(
     [
       'The same six probes, assessed twice by the same kernel. On the left-hand run the',
-      'prior is an ordinary contested distribution. On the right it is a point estimate —',
+      'prior is an authored arithmetic example, not a response from this run. On the right it is a point estimate —',
       'one option at 1.0 — which is the shape a single-answer model returns.',
     ],
     2,
@@ -648,9 +661,9 @@ console.log(
   note(
     [
       'The deterministic rows are properties of code in this repository and a reader can',
-      'check them by reading it. The `unmeasured` rows are not weaker versions of the same',
-      'claim — nothing here measures them at all, and the fixtures are scripted precisely',
-      'so that they cannot be measured by running this.',
+      'check them by reading it. The `unmeasured` rows concern quality, not whether a',
+      'request was made. Live answers on synthetic cases do not establish correctness,',
+      'calibration or fitness for real banking operations.',
       '',
       'Read the whole table for what it is. Every row above the line makes an action',
       'undoable and confirms it happened. None of them makes an action appropriate. This',
@@ -665,8 +678,9 @@ console.log(
 console.log(
   note(
     [
-      'The baseline column ran the whole workflow with Jev removed and static priority in',
-      'its place. It refuses everything this run refused. What it cannot do is be uncertain',
+      'The baseline column records static-priority selection over the same eligible steps.',
+      'It does not execute a separate workflow or establish matching refusal outcomes.',
+      'What static priority cannot do is be uncertain',
       '— static priority always has an answer, so there is never a moment at which it would',
       'go and read something. Whether preselection, probing or refusal is worth anything',
       'here is not measured by this repository.',

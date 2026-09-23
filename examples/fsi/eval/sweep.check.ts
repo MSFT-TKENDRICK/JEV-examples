@@ -12,6 +12,7 @@
 import { createLedger, metricsFor, stateReference } from '../../../src/ledger.ts';
 import type { ConsideredProbe, DecisionRecord, ProbeRecord } from '../../../src/ledger.ts';
 import { deterministicallyContradicted, probeEconomy, resolution } from './sweep.ts';
+import { checkIntegration } from './integration.check.ts';
 
 let failures = 0;
 let total = 0;
@@ -280,6 +281,8 @@ function recordWith(probes: readonly ProbeRecord[]): DecisionRecord {
     deterministicallyContradicted(withThresholds),
   );
 }
+
+await checkIntegration();
 
 console.log(
   failures === 0 ? `\n${total}/${total} checks passed.` : `\n${failures} of ${total} check(s) failed.`,

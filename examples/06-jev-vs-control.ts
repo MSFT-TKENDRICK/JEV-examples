@@ -1,19 +1,19 @@
 /**
  * 06 - The same maze, twice: a distribution against a point estimate.
  *
- * Same site, same loop, same click mechanics, same scripted judgements. The
- * only difference between the arms is the *shape* of what the decision model
- * returns:
+ * Same site, same loop and click mechanics, with two decision models:
  *
  *   Jev arm      a distribution over the page's elements
- *   control arm  the same answers with everything but the argmax thrown away
+ *   control arm  an independent generative answer naming one element
  *
- * The control arm is built by degrading the Jev arm - `toPointEstimate` takes
- * the distribution and returns `{ [argmax]: 1 }` - so nothing else can differ.
+ * Jev calls Vercel AI Gateway by default. The paid generative control requires
+ * AI_GATEWAY_GENERATIVE=1, otherwise it is a labelled replay. JEV_MOCK=1
+ * scripts both arms for offline tests. The arithmetic comparison separately
+ * collapses the actual Jev home-page response to a point estimate.
  *
  * READ THIS BEFORE QUOTING THE RESULT
  *
- * The control arm is an adversarial fixture, not a fair benchmark. A competent
+ * The scripted control arm is an adversarial fixture, not a fair benchmark. A competent
  * generative implementation, constrained the same way, could pass the same
  * checks: it could be made to emit scores over the candidate list, and those
  * scores could drive the same beam and the same probe selection. The claim here
@@ -29,7 +29,7 @@
  */
 
 import { assess, eigIsDegenerate, entropy } from '../src/information-gain.ts';
-import { createClient } from '../src/client.ts';
+import { activeBackend, backendLabel, createClient } from '../src/client.ts';
 import type { BrowseAction } from '../src/control-agent.ts';
 import { createControlJudge } from '../src/control-agent.ts';
 import type { SiteScript } from '../src/site/judges.ts';
@@ -138,7 +138,8 @@ function report(label: string, detail: string, result: WalkResult): void {
 }
 
 title('06 - The same maze, twice');
-banner(createClient().live);
+const { live } = createClient();
+banner(live);
 console.log(`\n  ${dim(TASK)}`);
 
 const jev = createJevJudge({ script: SCRIPT, beamWidth: 3 });
@@ -149,7 +150,16 @@ const control = createControlJudge({
   thinkMs: Number(process.env['CONTROL_THINK_MS'] ?? 120),
 });
 
-const jevRun = await walk({ judge: jev });
+console.log(`  ${dim(`control transport: ${control.live ? 'live AI Gateway' : 'SCRIPTED replay; not a live model comparison'}`)}`);
+const observed: { home?: Record<string, number> } = {};
+const jevRun = await walk({
+  judge: jev,
+  onEvent(event) {
+    if (event.type === 'judged' && observed.home === undefined) {
+      observed.home = { ...event.prior };
+    }
+  },
+});
 const controlRun = await walk({ judge: control });
 
 report('jev     ', jev.detail, jevRun);
@@ -160,29 +170,31 @@ report('control ', control.detail, controlRun);
 // was missing, and where it was needed.
 // ---------------------------------------------------------------------------
 
-console.log(`\n${bold('what the control arm lacked')}`);
+console.log(`\n${bold('what the interfaces retain')}`);
 
 const home = page('home');
-const homePrior = { e1: 0.6263, e2: 0.0606, e3: 0.0505, e4: 0.0404, e5: 0.1313, e6: 0.0909 };
-const pointPrior = { e1: 1 };
+const homePrior = observed.home;
+if (homePrior === undefined) throw new Error('No Jev home-page judgement was received.');
+const top = Object.entries(homePrior).sort(([, a], [, b]) => b - a)[0];
+if (top === undefined) throw new Error('Jev returned an empty home-page distribution.');
+const pointPrior = { [top[0]]: 1 };
 
 console.log(
   note(
     [
-      `1. Something to back up to. Both arms clicked "${home.elements[0]?.label}" first. Three pages`,
-      '   later the archive proves the branch finished, and - importantly - the control arm knew it:',
-      '   its schema has a `deadEnd` field and it set it. It asked to back up. There was nowhere to',
-      `   back up to, so ${controlRun.status} was the only answer available.`,
+      '1. Something to back up to. Jev supplies a distribution over all offered elements.',
+      '   The independent control supplies a single element, so it retains no ranked alternative.',
+      `   This run: Jev ${jevRun.backtracks.length} backtrack(s), control ${controlRun.backtracks.length}.`,
+      `   First clicks: Jev "${jevRun.history[0] ?? '(none)'}"; control "${controlRun.history[0] ?? '(none)'}".`,
       '',
       '   The alternatives you back up to are exactly the probability mass you threw away at the',
-      `   branch point. Here that is ${jevRun.backtracks[0]?.alternativeMass.toFixed(4) ?? 'n/a'} of path probability, sitting on "Billing history",`,
-      '   which is the link that works.',
+      '   branch point. Whether a run needs those alternatives depends on its actual judgements.',
     ],
     2,
   ),
 );
 
-const probes = toProbes(page('billing')).concat(toProbes(home));
+const probes = toProbes(home);
 const distributionEntropy = entropy(Object.values(homePrior));
 const pointEntropy = entropy(Object.values(pointPrior));
 
@@ -193,7 +205,7 @@ console.log(
       '2. A prior worth probing. Expected information gain is the entropy a probe is expected to',
       '   remove. Over a point mass there is none to remove:',
       '',
-      `     H(distribution) = ${distributionEntropy.toFixed(4)} bits      H(point estimate) = ${pointEntropy.toFixed(4)} bits`,
+      `     H(Jev home response) = ${distributionEntropy.toFixed(4)} nats      H(point estimate) = ${pointEntropy.toFixed(4)} nats`,
       `     eigIsDegenerate(distribution) = ${String(eigIsDegenerate(homePrior))}   eigIsDegenerate(point estimate) = ${String(eigIsDegenerate(pointPrior))}`,
       '',
       '   So every probe on the site scores exactly zero against the point estimate. Not "harder',
@@ -230,14 +242,19 @@ console.log(`\n${bold('the honest reading')}`);
 console.log(
   note(
     [
-      'This is a scripted fixture over a site written for the purpose. The labels are confusable',
-      'because they were written to be, the trap is three pages deep because it was built three',
-      'pages deep, and the probe costs are authored numbers. Nothing here measures whether Jev',
-      'judges this site well.',
+      live
+        ? activeBackend() === 'local'
+          ? `The Jev arm used live responses from ${backendLabel()}, not the authored answer script.`
+          : 'The Jev arm used live Vercel AI Gateway responses, not the authored answer script.'
+        : 'JEV_MOCK=1: both arms used scripted responses, not live model inference.',
+      control.live
+        ? 'The control used independent AI Gateway responses, not a collapse of the Jev answers.'
+        : 'The control was a scripted replay. Do not treat these paths as a live model benchmark.',
+      'The site, probe partitions and costs are authored. This is not a calibrated quality benchmark.',
       '',
-      'What it does show is mechanical and checkable: given the same judgements, the application',
-      'that keeps the distribution can rank an alternative and price a probe, and the application',
-      'that keeps only the argmax can do neither. Both facts are arithmetic on the numbers printed',
+      'The entropy comparison uses the actual Jev response captured in this run, then collapses',
+      'that response to its argmax. Keeping the distribution can rank an alternative and price',
+      'a probe; keeping only the argmax cannot. Both facts are arithmetic on the numbers printed',
       'above. A generative model that emitted calibrated scores over the same candidate list would',
       'drive the same machinery just as well - the deficiency is in the single answer, not in the',
       'kind of model that produced it.',

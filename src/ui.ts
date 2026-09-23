@@ -1,6 +1,7 @@
 /** Small console helpers so the examples read like reports, not log dumps. */
 
 import type { Verdict } from './rubric.ts';
+import { backendLabel } from './client.ts';
 
 const supportsColor =
   process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
@@ -22,8 +23,8 @@ export function title(text: string): void {
 export function banner(live: boolean): void {
   console.log(
     live
-      ? dim('transport: live TypeSafe API (@typesafe-ai/sdk)')
-      : dim('transport: offline mock — set TYPESAFE_API_KEY for live Jev calls'),
+      ? dim(`transport: ${backendLabel()} (@typesafe-ai/sdk)`)
+      : dim('transport: SCRIPTED_MOCK (JEV_MOCK=1) — no Jev inference; unset JEV_MOCK to use Gateway credentials'),
   );
 }
 

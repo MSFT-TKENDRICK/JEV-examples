@@ -23,8 +23,8 @@
  * emit scores over the candidate list would drive the same machinery. The
  * deficiency is in the single answer.
  *
- * With `AI_GATEWAY_API_KEY` set this is a real Gateway call and the latency in
- * the comparison is a real measurement. Without one it replays a script
+ * Only explicit `AI_GATEWAY_GENERATIVE=1` enables paid Gateway generation.
+ * Otherwise it replays a script
  * through `MockLanguageModelV4` and sleeps for `thinkMs` to stand in for
  * generation time. That stand-in is declared everywhere it is shown.
  */
@@ -39,6 +39,7 @@ import { z } from 'zod';
 import type { Judge } from './site/walk.ts';
 import { describe } from './site/walk.ts';
 import { TASK } from './site/graph.ts';
+import { isLiveGeneration } from './client.ts';
 
 export const browseSchema = z.object({
   done: z.boolean().describe('True if the task has been carried out and the page confirms it.'),
@@ -73,7 +74,7 @@ export interface ControlOptions {
  * affords: there is no second path to keep, because no second path was named.
  */
 export function createControlJudge(options: ControlOptions): Judge & { live: boolean } {
-  const live = Boolean(process.env['AI_GATEWAY_API_KEY']) && process.env['JEV_MOCK'] !== '1';
+  const live = isLiveGeneration();
   const thinkMs = options.thinkMs ?? CONTROL_THINK_MS;
 
   let current: BrowseAction | undefined;
