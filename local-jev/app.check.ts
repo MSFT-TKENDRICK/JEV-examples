@@ -12,6 +12,12 @@ import type { EntryType } from '@typesafe-ai/sdk';
 import { createLocalJevServer, type ContextLimits, type DecisionEngine, type FidelityIssue, type OverflowPolicy } from './app.ts';
 import type { LayaAnswer, LayaQuestion, LayaResult } from './protocol.ts';
 
+let checks = 0;
+const pass = (message: string) => {
+  checks += 1;
+  console.log(`PASS  ${message}`);
+};
+
 const seen: { state: EntryType; questions: Record<string, LayaQuestion> }[] = [];
 let issues: FidelityIssue[] = [];
 let needed: ContextLimits = { maxLen: 512, headMaxLen: 192 };
@@ -83,7 +89,7 @@ try {
   assert.deepEqual(result.answers.urgency.legend, { 0: 'low', 1: null, 2: { level: 'high' } });
   assert.deepEqual(result.answers.mapped.legend, { 0: 'no', 1: 'yes' });
   assert.deepEqual(Object.keys(result.answers.churn).sort(), ['noul', 'type']);
-  console.log('PASS  SDK round-trip returns exact TypeSafe answer shapes; Laya-only fields are stripped');
+  pass('SDK round-trip returns exact TypeSafe answer shapes; Laya-only fields are stripped');
 
   const sent = seen[0]!;
   assert.deepEqual(sent.state, { ticket: 'refund missing', amount: 12.5 });
@@ -96,13 +102,13 @@ try {
   assert.deepEqual(sent.questions['mapped'], { type: 'score', instructions: 'Mapped rubric', criteria: ['no', 'yes'] });
   assert.deepEqual(sent.questions['churn'], { type: 'noul', instructions: 'Will they churn?' });
   assert.deepEqual(sent.questions['dispute'], { type: 'noul', instructions: '', criteria: { true: 'they dispute' } });
-  console.log('PASS  structured, null and score-map entries are translated for Laya without losing labels');
+  pass('structured, null and score-map entries are translated for Laya without losing labels');
 
   const models = await client.models.list();
   assert.equal(models[0]?.name, 'local-laya/test-engine');
   const health = await (await fetch(`${base}/health`)).json() as { jev: boolean; model: string };
   assert.equal(health.jev, false);
-  console.log('PASS  /v1/models and /health name the local model and never claim Jev');
+  pass('/v1/models and /health name the local model and never claim Jev');
 
   const withPolicy = async (overflow: OverflowPolicy) => {
     const policyServer = createLocalJevServer(engine, { overflow });
@@ -142,7 +148,7 @@ try {
   const plain = await client.systemOne({ state: 'x', questions: { route: choice('Which?', { a: null, b: null }) } }).asResponse();
   assert.equal(plain.headers.get('x-local-jev-overflow'), 'none');
   assert.deepEqual(contexts.at(-1), { maxLen: 512, headMaxLen: 192 });
-  console.log('PASS  over-length input runs at an extended context by default; reject, truncate and hard limits behave as documented');
+  pass('over-length input runs at an extended context by default; reject, truncate and hard limits behave as documented');
 
   failWith = 'question "route": options do not fit in head_max_len=192 tokens';
   await assert.rejects(
@@ -157,7 +163,7 @@ try {
     .catch((error: { status?: number }) => error);
   assert.equal((mismatch as { status?: number }).status, 502);
   wrongLabels = false;
-  console.log('PASS  backend limits surface as SDK errors; label drift is a 502, not a wrong answer');
+  pass('backend limits surface as SDK errors; label drift is a 502, not a wrong answer');
 
   const post = (body: string) =>
     fetch(`${base}/v1/systemone`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
@@ -176,8 +182,14 @@ try {
   }
   assert.equal((await fetch(`${base}/v1/nope`)).status, 404);
   assert.equal((await fetch(`${base}/v1/systemone`)).status, 405);
-  console.log('PASS  malformed requests get TypeSafe-style error bodies the SDK can read');
+  pass('malformed requests get TypeSafe-style error bodies the SDK can read');
 } finally {
   server.close();
   server.closeAllConnections();
 }
+
+if (checks === 0) {
+  console.error('REFUSE  no checks ran, so "passed" would describe nothing.');
+  process.exit(1);
+}
+console.log(`\n${checks}/${checks} checks passed.`);
