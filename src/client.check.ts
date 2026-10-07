@@ -18,6 +18,12 @@ import { page, TASK } from './site/graph.ts';
 import { createJevJudge } from './site/judges.ts';
 import { describe } from './site/walk.ts';
 
+let checks = 0;
+const pass = (message: string) => {
+  checks += 1;
+  console.log(`PASS  ${message}`);
+};
+
 const keys = [
   'TYPESAFE_API_KEY', 'JEV_MOCK', 'TYPESAFE_BASE_URL',
   'TYPESAFE_DEFAULT_MODEL', 'TYPESAFE_LOG_LEVEL',
@@ -69,7 +75,7 @@ try {
   process.env['JEV_MOCK'] = 'true';
   assert.throws(() => createClient(), /JEV_MOCK must be/);
   delete process.env['JEV_MOCK'];
-  console.log('PASS  missing/blank credentials and invalid mode cannot silently select a mock');
+  pass('missing/blank credentials and invalid mode cannot silently select a mock');
 
   const entries = [
     '../examples/01-quickstart.ts', '../examples/02-judge-rubrics.ts',
@@ -86,7 +92,7 @@ try {
     assert.notEqual(result.status, 0, `${entry} should fail without a key`);
     assert.match(result.stderr, /AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN is required/, entry);
   }
-  console.log('PASS  every Jev example entrypoint requires credentials by default');
+  pass('every Jev example entrypoint requires credentials by default');
 
   const questions = {
     route: choice('Which team handles this?', { billing: 'Charges', technical: 'Bugs' }),
@@ -95,7 +101,7 @@ try {
   const offline = createClient(() => ({ route: { choice: 'billing' } }));
   assert.equal(offline.live, false);
   assert.equal((await offline.client.systemOne({ state: 'fixture', questions })).answers.route.choice, 'billing');
-  console.log('PASS  explicit JEV_MOCK=1 runs offline without a key');
+  pass('explicit JEV_MOCK=1 runs offline without a key');
 
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -115,7 +121,7 @@ try {
   assert.equal(isLiveGeneration(), true);
   assert.equal(createControlJudge({ scripted: {} }).live, true);
   process.env['AI_GATEWAY_GENERATIVE'] = '0';
-  console.log('PASS  Gateway catalog model is default; legacy direct settings and paid models cannot take over');
+  pass('Gateway catalog model is default; legacy direct settings and paid models cannot take over');
   process.env['AI_GATEWAY_TYPESAFE_BASE_URL'] = `http://127.0.0.1:${address.port}/typesafe`;
   assert.equal(isLiveJev(), true);
   let scriptCalls = 0;
@@ -136,7 +142,7 @@ try {
   assert.deepEqual(request.state, { ticket: 'Broken integration' });
   assert.deepEqual(request.questions.route.criteria, questions.route.criteria);
   assert.equal(scriptCalls, 0);
-  console.log('PASS  default mode sends SDK HTTP requests and consumes service answers, never scripts');
+  pass('default mode sends SDK HTTP requests and consumes service answers, never scripts');
 
   const judge = createJevJudge({ script: {
     home: { target: { choice: 'e1' }, goalMet: { noul: 1 } },
@@ -150,20 +156,20 @@ try {
   assert.notEqual(browserRequest.state.task, page('home').title);
   assert.equal(judged.prior['e5'], 0.9);
   assert.equal(judged.signals.goalMet, 0.02);
-  console.log('PASS  browser judge sends the user task, page and history and uses service decisions');
+  pass('browser judge sends the user task, page and history and uses service decisions');
 
   status = 401;
   await assert.rejects(() => client.systemOne({ state: 'auth failure', questions }));
   assert.equal(scriptCalls, 0);
   assert.equal(requests.length, 3);
-  console.log('PASS  API failure propagates without falling back to scripted decisions');
+  pass('API failure propagates without falling back to scripted decisions');
 
   process.env['JEV_MOCK'] = '1';
   const forced = createClient(() => ({ route: { choice: 'billing' } }));
   assert.equal(forced.live, false);
   assert.equal((await forced.client.systemOne({ state: 'fixture', questions })).answers.route.choice, 'billing');
   assert.equal(requests.length, 3);
-  console.log('PASS  explicit mock mode never sends a request even when credentials are set');
+  pass('explicit mock mode never sends a request even when credentials are set');
 
   status = 200;
   goalMet = 0.99;
@@ -182,7 +188,7 @@ try {
   assert.match(comparison.stdout, /The Jev arm used live Vercel AI Gateway responses/);
   assert.match(comparison.stdout, /control transport: SCRIPTED replay/);
   assert.doesNotMatch(comparison.stdout, /Both arms clicked/);
-  console.log('PASS  comparison reports the service distribution and observed path, not a scripted outcome');
+  pass('comparison reports the service distribution and observed path, not a scripted outcome');
 
   delete process.env['AI_GATEWAY_API_KEY'];
   process.env['VERCEL_OIDC_TOKEN'] = 'loopback-oidc-token';
@@ -192,7 +198,7 @@ try {
   assert.equal(requests[4]?.authorization, `Bearer ${process.env['VERCEL_OIDC_TOKEN']}`);
   assert.equal(requests[4]?.url, '/typesafe/v1/systemone');
   assert.equal(JSON.parse(requests[4]!.body).model, 'typesafe-ai/jev');
-  console.log('PASS  Gateway OIDC authentication works without either API key');
+  pass('Gateway OIDC authentication works without either API key');
 
   delete process.env['VERCEL_OIDC_TOKEN'];
   process.env['JEV_BACKEND'] = 'local';
@@ -216,7 +222,7 @@ try {
   process.env['JEV_BACKEND'] = 'gateway';
   assert.throws(() => createClient(), /AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN is required/);
   assert.equal(backendLabel(), 'Jev via Vercel AI Gateway');
-  console.log('PASS  JEV_BACKEND=local needs no Gateway key, targets LOCAL_JEV_URL and is labelled not-Jev');
+  pass('JEV_BACKEND=local needs no Gateway key, targets LOCAL_JEV_URL and is labelled not-Jev');
 } finally {
   if (server.listening) {
     await new Promise<void>((resolve, reject) => {
@@ -229,3 +235,9 @@ try {
     else process.env[key] = value;
   }
 }
+
+if (checks === 0) {
+  console.error('REFUSE  no checks ran, so "passed" would describe nothing.');
+  process.exit(1);
+}
+console.log(`\n${checks}/${checks} checks passed.`);
