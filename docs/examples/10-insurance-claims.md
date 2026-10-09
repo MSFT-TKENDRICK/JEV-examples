@@ -19,6 +19,8 @@ Summary
   FNOL-5530                completed    property_water               no probe
   FNOL-5544                refused      injury                       1 probe(s), cost 1 · probe changed the answer
   FNOL-5551                refused      motor_collision              1 probe(s), cost 1
+  FNOL-5571                completed    motor_collision              no probe
+  FNOL-5572                completed    motor_collision              no probe
   FNOL-5560                rolled_back  property_water               no probe
 ```
 
@@ -28,13 +30,18 @@ refuses, and the claim is not set. FNOL-5560 is confident, but the annotation st
 down. The claim type and lane are written, verification of the annotations fails, and both
 earlier writes are undone.
 
+FNOL-5571 is the auto claim from the brief: a rear-end collision with a police report, the
+car drivable, and no injuries. It is confident and complete, so it takes the standard lane.
+That lane is a label. FNOL-5572 is the same claim with the damage photos not yet sent. It is
+equally confident, but the missing-document signal is 72%, so the lane waits on the claimant.
+
 ## Requested use cases, and what this example does with each
 
 | Requested | Here |
 |---|---|
 | Classify first-notice reports, adjuster notes and supporting documents | Jev classifies the report. Adjuster notes and attachments are not parsed in this example |
 | Detect claim complexity, missing information and potential fraud indicators | Yes/no indicators for missing documents and fraud, asked in the same request as the classification |
-| Prioritise claims for straight-through processing or specialist review | A lane label only. **Specialist review is not implemented**, because routing to a person is outside the contract. Straight-through payment is out of scope |
+| Prioritise claims for straight-through processing or specialist review | Two lane labels only: **standard** (what the brief calls straight-through, with no payment) and **pending-documents** (what it calls request-evidence). **ADJUSTER_REVIEW, SIU_REVIEW and TOTAL_LOSS_REVIEW are not offered**: each routes to a person, which the architecture contract forbids. Straight-through payment is out of scope |
 | Escalate uncertain or high-risk cases to a human adjuster | **Not implemented.** A high fraud indicator refuses the automatic setting and leaves the claim untouched |
 | Convert reports and notes into probabilistic risk indicators for underwriting | The indicators are stored with the claim as an annotation. Nothing reads them here |
 

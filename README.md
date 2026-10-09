@@ -52,7 +52,7 @@ In the GitHub Copilot desktop app, every example is a run button, configured in
 | [06 — Jev vs control](docs/examples/06-jev-vs-control.md) | `npm run compare` | The same maze walked with a distribution and with a single answer |
 | [07 — Card servicing (FSI)](docs/examples/07-card-servicing.md) | `npm run fsi:card-servicing` | Bounded next-step selection for card servicing, with verified rollback |
 | [08 — Runbook routing (FSI)](docs/examples/08-runbook-routing.md) | `npm run fsi:runbook-routing` | Residual incident routing, with diagnostics chosen by expected information gain |
-| [09 — Fraud and AML alerts (FSI)](docs/examples/09-fraud-alerts.md) | `npm run fsi:fraud-alerts` | Typology and priority for alerts, with KYC checks. Nothing is closed |
+| [09 — Fraud triage (FSI)](docs/examples/09-fraud-alerts.md) | `npm run fsi:fraud-alerts` | Alert typology and priority, a what-if on a transaction field, and a customer-report tool shortlist. Nothing is closed, approved or run |
 | [10 — Insurance claims (FSI)](docs/examples/10-insurance-claims.md) | `npm run fsi:insurance-claims` | Claim type, lane and risk indicators. Nothing is paid |
 | [11 — Content safety (FSI)](docs/examples/11-content-safety.md) | `npm run fsi:content-safety` | Deterministic rules before a policy-clause choice; reversible visibility limits |
 | [12 — Compliance audit (FSI)](docs/examples/12-compliance-audit.md) | `npm run fsi:compliance-audit` | Evidence fields read deterministically, rubric ratings, and a draft assessment |

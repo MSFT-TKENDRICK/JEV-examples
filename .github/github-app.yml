@@ -51,7 +51,7 @@ scripts:
   - name: "08 Runbook routing (FSI)"
     command: npm run fsi:runbook-routing
 
-  - name: "09 Fraud and AML alerts (FSI)"
+  - name: "09 Fraud triage (FSI)"
     command: npm run fsi:fraud-alerts
 
   - name: "10 Insurance claims (FSI)"

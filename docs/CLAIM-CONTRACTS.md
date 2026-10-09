@@ -234,15 +234,21 @@ refusal, and never a person. Each one also has these scope limits.
 - Every distribution is Jev's, and is uncalibrated. Fixtures are authored, and the
   shipped fixture outputs are captures from scripted runs.
 
-### Example 09 — Fraud and AML alert prioritisation
+### Example 09 — Fraud triage: alerts, transactions and customer reports
 
 May claim:
 - A probe reading a record can change the typology, and the changed typology is acted on.
+- A changed field, such as device trust, moves the distribution, and the run reports the move.
 - A deterministic check against KYC can refuse a confident "legitimate pattern" label.
+- Two leaders with the same name can differ in confidence, and only the confident one is acted on.
+- Several yes/no signals asked in one request can drive a written tool shortlist. No tool is run.
 - Completed alerts are ordered by priority and by the evidence the run gathered.
 
-Must not claim: that an alert is correct, suspicious, closed or reported; that the
-typologies are a regulatory taxonomy; that payee matching is entity resolution.
+Must not claim: that an alert or transaction is correct, suspicious, closed, cleared, approved
+or held; that the typologies are a regulatory taxonomy; that payee matching is entity
+resolution; that a tool was run or a reasoning model consulted. APPROVE, HOLD and CHALLENGE
+for transactions are not offered, because they are authorisation decisions. ESCALATE and
+analyst or sanctions routes are not offered, because they route to a person.
 
 ### Example 10 — Insurance claims
 
@@ -251,9 +257,11 @@ May claim:
 - A probe reading the claim history can change the classification.
 - A fraud indicator at or above 0.5 stops the automatic setting of a claim.
 - A failed write rolls back the writes that preceded it.
+- The lane outcomes are a standard label and a pending-documents label, and nothing else.
 
 Must not claim: that any claim is paid, approved, denied or fraudulent; that a lane is a
-payment decision; that indicators are calibrated or suitable for underwriting.
+payment decision; that indicators are calibrated or suitable for underwriting. ADJUSTER_REVIEW,
+SIU_REVIEW and TOTAL_LOSS_REVIEW are not offered, because they route to a person.
 
 ### Example 11 — Content safety
 

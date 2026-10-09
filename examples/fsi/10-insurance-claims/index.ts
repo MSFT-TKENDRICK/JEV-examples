@@ -15,8 +15,8 @@
  *
  * Must not claim: that any claim is paid, approved, denied or fraudulent. Nothing
  * here moves money. A "standard" lane does not mean straight-through payment.
- * Escalation to a claims specialist is not implemented, because the architecture
- * contract forbids routing uncertainty to a person. Jev's indicators are not
+ * Adjuster review, SIU review and total-loss review are not offered as options: each
+ * routes to a person, which the architecture contract forbids. Jev's indicators are not
  * calibrated, and the fixtures are authored.
  *
  * Run: npm run fsi:insurance-claims
@@ -215,7 +215,40 @@ export function decisions(): Decision<ClaimRecord>[] {
       () => ({ distribution: FLAT, indicators: { missing_documents: 0.2, fraud_indicators: 0.1 } }),
       { outcome: 'refused' },
     ),
-    // Confident, but the annotation store is down. The first two writes are undone.
+    // Confident and complete: the brief's auto claim. The standard lane is a label; nothing is paid.
+    decisionFor(
+      claim({
+        claimId: 'FNOL-5571',
+        report: 'Rear-ended while stopped; police report attached, car drivable, no injuries reported.',
+        priorClaims12m: 2,
+        documentsReceived: ['police-report'],
+        documentsRequired: ['police-report'],
+      }),
+      [CLAIMS_HISTORY],
+      2,
+      () => ({
+        distribution: { motor_collision: 0.84, injury: 0.06, property_water: 0.04, subrogation: 0.04, [NONE]: 0.02 },
+        indicators: { missing_documents: 0.1, fraud_indicators: 0.18 },
+      }),
+      { outcome: 'completed', flipped: false },
+    ),
+    // The same claim with the damage photos missing. The lane waits on the claimant.
+    decisionFor(
+      claim({
+        claimId: 'FNOL-5572',
+        report: 'Rear-ended while stopped; police report attached, damage photos not yet sent.',
+        documentsReceived: ['police-report'],
+        documentsRequired: ['police-report', 'photos'],
+      }),
+      [DOCUMENT_CHECK],
+      2,
+      () => ({
+        distribution: { motor_collision: 0.84, injury: 0.06, property_water: 0.04, subrogation: 0.04, [NONE]: 0.02 },
+        indicators: { missing_documents: 0.72, fraud_indicators: 0.18 },
+      }),
+      { outcome: 'completed', flipped: false },
+    ),
+    // Confident and complete, but the annotation store is down. The first two writes are undone.
     decisionFor(
       claim({
         claimId: 'FNOL-5560',

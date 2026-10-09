@@ -156,7 +156,8 @@ reversible fields and refuses rather than disposing. None of them:
 
 - closes, clears, reports or dispositions an alert, claim or post (the AML and payment
   prohibitions above apply in full);
-- pays, approves, denies or sends anything;
+- pays, approves, denies or sends anything, and approves, holds or challenges a transaction
+  (an authorisation decision, which this document prohibits);
 - routes an uncertain case to a person (see the architecture contract in
   [`CLAIM-CONTRACTS.md`](CLAIM-CONTRACTS.md));
 - decides scope, suitability or authorisation: the fraud, claims, content and audit examples

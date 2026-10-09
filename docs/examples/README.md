@@ -15,7 +15,7 @@ and [`../FSI-BOUNDARIES.md`](../FSI-BOUNDARIES.md).
 | 06 — Jev vs control | `npm run compare` | [06-jev-vs-control.md](06-jev-vs-control.md): the same maze walked with a distribution and with a single answer |
 | 07 — Card servicing (FSI) | `npm run fsi:card-servicing` | [07-card-servicing.md](07-card-servicing.md): bounded next-step selection for card servicing, with verified rollback |
 | 08 — Runbook routing (FSI) | `npm run fsi:runbook-routing` | [08-runbook-routing.md](08-runbook-routing.md): residual incident routing; diagnostics chosen by expected information gain |
-| 09 — Fraud and AML alerts (FSI) | `npm run fsi:fraud-alerts` | [09-fraud-alerts.md](09-fraud-alerts.md): typology and priority for alerts, with KYC checks; nothing is closed |
+| 09 — Fraud triage (FSI) | `npm run fsi:fraud-alerts` | [09-fraud-alerts.md](09-fraud-alerts.md): alert typology and priority, a what-if on a transaction field, and a customer-report tool shortlist. Nothing is closed, approved or run |
 | 10 — Insurance claims (FSI) | `npm run fsi:insurance-claims` | [10-insurance-claims.md](10-insurance-claims.md): claim type, lane and risk indicators; nothing is paid |
 | 11 — Content safety (FSI) | `npm run fsi:content-safety` | [11-content-safety.md](11-content-safety.md): deterministic rules before a clause choice; reversible visibility limits |
 | 12 — Compliance audit (FSI) | `npm run fsi:compliance-audit` | [12-compliance-audit.md](12-compliance-audit.md): evidence fields read deterministically, rubric ratings, and a draft assessment |
