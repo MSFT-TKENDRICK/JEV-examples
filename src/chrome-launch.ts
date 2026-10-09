@@ -99,3 +99,17 @@ export async function launchRecordableChrome(): Promise<LaunchedChrome> {
   await pause(1500); // let the debugging port come up before connectCDP dials it
   return { port, kill: () => proc.kill() };
 }
+
+/**
+ * A Chrome window the user can watch, for runs that do not record. webreel's
+ * headed launch uses the full Chrome build and omits the begin-frame flags, so
+ * nothing about the recorder's capture problem applies to it.
+ */
+export async function launchVisibleChrome(): Promise<LaunchedChrome> {
+  const chrome = await launchChrome({ headless: false });
+  await pause(1500); // as in launchRecordableChrome: connectCDP must not dial before the page target exists
+  // webreel's kill() also deletes the profile on a timer, and on Windows Chrome
+  // still holds those files, so that timer throws EPERM and fails the run. The
+  // process is stopped here instead, as launchRecordableChrome does.
+  return { port: chrome.port, kill: () => chrome.process.kill() };
+}

@@ -35,7 +35,7 @@ import {
   pause,
 } from '@webreel/core';
 
-import { launchRecordableChrome } from './chrome-launch.ts';
+import { launchRecordableChrome, launchVisibleChrome } from './chrome-launch.ts';
 import type { WalkDriver } from './site/walk.ts';
 import { dim } from './ui.ts';
 
@@ -163,7 +163,9 @@ export async function openSession(options: SessionOptions): Promise<BrowserSessi
     await mkdir(dirname(options.outputPath), { recursive: true });
   }
 
-  const chrome = await launchRecordableChrome();
+  // A run that records needs the headless shell webreel's recorder can capture.
+  // A run that does not record opens a Chrome window the user can watch.
+  const chrome = wantsRecording ? await launchRecordableChrome() : await launchVisibleChrome();
   const client = await connectCDP(chrome.port);
 
   await client.Page.enable();

@@ -55,8 +55,8 @@ in `.env` they run Jev, and without one they run the local Laya proxy and say so
 
 | Button | Runs | Backend |
 |---|---|---|
-| 01–08 | The matching `npm run` command | Jev if a key is set, otherwise Laya |
-| 05 Browser (no video) | `npm run record -- --no-video` | Jev if a key is set, otherwise Laya |
+| 04 Browser use (offline, text only) | `npm run browser`. A walk of a synthetic site in memory. It opens no browser | Jev if a key is set, otherwise Laya |
+| 05 Browser use (real Chrome window) | `npm run record -- --no-video`. Opens a visible Chrome window and drives it | Jev if a key is set, otherwise Laya |
 | Python judge rubric | `npm run example -- examples/python/judge_rubric.py` | Jev if a key is set, otherwise Laya |
 | All examples | `npm run all` (excludes 05) | Jev if a key is set, otherwise Laya. Takes about 25 minutes on Laya |
 | Python: install examples requirements | `npm run python:install` | Python on `PATH` |

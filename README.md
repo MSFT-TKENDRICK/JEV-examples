@@ -47,8 +47,8 @@ In the GitHub Copilot desktop app, every example is a run button, configured in
 | [01 — Quickstart](docs/examples/01-quickstart.md) | `npm run quickstart` | One request with several typed questions; a flat answer selects the next probe |
 | [02 — Judge rubrics](docs/examples/02-judge-rubrics.md) | `npm run judge` | A torn verdict decomposes into narrower sub-rubrics |
 | [03 — Agent harness](docs/examples/03-agent-harness.md) | `npm run harness` | Probe, reversible action, or refusal; the irreversible step runs last |
-| [04 — Browser use](docs/examples/04-browser-use.md) | `npm run browser` | Choosing among a page's own elements, with backtracking |
-| [05 — Browser, live](docs/examples/05-browser-live.md) | `npm run record` | The same loop against real Chrome, recorded with `webreel` |
+| [04 — Browser use](docs/examples/04-browser-use.md) | `npm run browser` | Choosing among a page's own elements, with backtracking. Runs in memory and opens no browser |
+| [05 — Browser, live](docs/examples/05-browser-live.md) | `npm run record` | The same loop in a real Chrome window (`-- --no-video`), or recorded with `webreel` |
 | [06 — Jev vs control](docs/examples/06-jev-vs-control.md) | `npm run compare` | The same maze walked with a distribution and with a single answer |
 | [07 — Next step (FSI)](docs/examples/07-next-step.md) | `npm run fsi:07` | Bounded next-step recommendation for card servicing |
 | [08 — Runbook routing (FSI)](docs/examples/08-runbook-routing.md) | `npm run fsi:08` | Residual incident routing, with diagnostics chosen by expected information gain |

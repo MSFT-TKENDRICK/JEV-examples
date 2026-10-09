@@ -32,12 +32,14 @@ scripts:
   - name: "03 Agent harness"
     command: npm run harness
 
-  - name: "04 Browser use"
+  # Walks a synthetic site in memory. It opens no browser and prints text only.
+  - name: "04 Browser use (offline, text only)"
     command: npm run browser
 
-  # Drives Chrome without recording. Recording (npm run record) writes
-  # docs/media/browser-use.mp4 and would overwrite the committed capture.
-  - name: "05 Browser (no video)"
+  # Opens a visible Chrome window and drives it over the same site (npm run
+  # record would record video into docs/media and overwrite the committed
+  # capture, so --no-video is required here).
+  - name: "05 Browser use (real Chrome window)"
     command: npm run record -- --no-video
 
   - name: "06 Jev vs control"
