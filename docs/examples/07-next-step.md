@@ -1,4 +1,4 @@
-### 07 — Uncertainty selects the next machine action
+# 07 — Uncertainty selects the next machine action
 
 `npm run fsi:07`
 
@@ -23,7 +23,7 @@ the state. Three outcomes are possible and none of them is a person:
   reversible step is verified before the single irreversible step commits;
 - **refuse** — stop, state why, change nothing. Terminal.
 
-#### A probe changes which step wins
+## A probe changes which step wins
 
 The customer is unsure whether they signed up for something. The first
 distribution leads on "send them the receipt", by five points over "open a
@@ -72,7 +72,7 @@ alone: `card_status` costs 1 but only removes 0.22 nats, while
 `prior_dispute_record` removes 0.68 nats for a cost of 6. The whole ranking is
 printed because a selection you cannot see lose to anything is not a selection.
 
-#### The budget runs out and the application refuses
+## The budget runs out and the application refuses
 
 Two lookups later, on a genuinely unresolvable report, the distribution has
 barely moved:
@@ -99,7 +99,7 @@ A probe already spent is excluded from the next ranking — reading the same
 record twice buys nothing the second time, which is why `device_fingerprint` is
 absent from the round-two table.
 
-#### A failed verification unwinds the plan in reverse
+## A failed verification unwinds the plan in reverse
 
 `open_dispute` is not one action. It expands into a plan whose one irreversible
 step is last, checked by `validatePlan` before anything runs. When the
@@ -121,7 +121,7 @@ provisional credit hold does not verify, the chargeback is never presented:
       ↩ record_dispute_intent undone
 ```
 
-#### Eleven decisions, five of which changed nothing
+## Eleven decisions, five of which changed nothing
 
 ```
   scenario                         jev recommended         route    probes                               harness executed        outcome      baseline
@@ -144,7 +144,7 @@ freezing the card is what makes a replacement eligible at all, and the case can
 only close once no disputable transaction is outstanding and the acting
 principal is entitled to close it.
 
-#### A point estimate gives a probe nothing to remove
+## A point estimate gives a probe nothing to remove
 
 The same six probes, assessed by the same kernel, against a contested prior and
 then against a point estimate:
@@ -174,7 +174,7 @@ every probe. A model that returns one answer supplies no basis for choosing
 which lookup to run, because it reports nothing a lookup could reduce. The
 probing in this example is downstream of the distribution existing at all.
 
-#### What this does and does not show
+## What this does and does not show
 
 Explicit `JEV_MOCK=1` runs use scripted fixtures through `src/mock-fetch.ts`, which exercises
 the real SDK code path with manufactured HTTP responses. The distributions above

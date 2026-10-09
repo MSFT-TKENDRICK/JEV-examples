@@ -1,4 +1,4 @@
-### 05 — The same loop, against a real browser
+# 05 — The same loop, against a real browser
 
 [`examples/05-browser-live.ts`](../../examples/05-browser-live.ts) — the decision
 loop from example 04, unchanged, driving real Chrome over CDP against the same
@@ -21,7 +21,7 @@ values read back out of the DOM to verify. The site was authored to be hard, so
 the video is evidence of what the application does with a distribution — not
 evidence that the distribution deserves trust.
 
-#### What it may be read as showing
+## What it may be read as showing
 
 That the loop in [`src/site/walk.ts`](../../src/site/walk.ts) is literally the
 same code offline and against a browser — the only difference is a `WalkDriver`;
@@ -34,7 +34,7 @@ plan verify against the real DOM.
 browser agents in general, or about the difficulty of a site whose difficulty was
 authored in this repository.
 
-#### The DOM is checked against the graph
+## The DOM is checked against the graph
 
 Every arrival compares the live element list and the filename against
 [`src/site/graph.ts`](../../src/site/graph.ts) and **throws on mismatch**, so the
@@ -55,7 +55,7 @@ synthetic one then clicked whatever occupied those coordinates on the page that
 had just loaded — two pages per click. The driver now moves the cursor for the
 recording and follows the element's own `href`.
 
-#### Fixture output from a real browser run
+## Fixture output from a real browser run
 
 ```
   step 4  archive-2025.html
@@ -96,7 +96,7 @@ The commit, with the form filled and read back through CDP:
   outcome goal_reached  8 pages · 8 requests · 2 probes costing 3 · 1 backtrack(s) · 28892ms wall clock
 ```
 
-#### The recording
+## The recording
 
 `npm run record` writes `docs/media/browser-use.mp4` using live Jev by default.
 The **checked-in recording uses explicit `JEV_MOCK=1` fixture responses**. To

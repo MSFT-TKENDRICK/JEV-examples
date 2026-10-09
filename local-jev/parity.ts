@@ -60,7 +60,7 @@ try {
         payments: 'duplicate or failed payments',
         general: null,
       }),
-      severity: score('How severe is the customer impact?', { 0: 'none', 1: 'minor', 2: 'moderate', 3: 'major', 4: 'critical' }),
+      severity: score('How severe is the customer impact?', ['none', 'minor', 'moderate', 'major', 'critical']),
       duplicate: noul('Is this a duplicate charge?', { true: 'the same purchase was charged more than once', false: null }),
       fraud: noul('Does the customer report unauthorised use?'),
     },

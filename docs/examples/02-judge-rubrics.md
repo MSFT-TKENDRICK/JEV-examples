@@ -1,4 +1,4 @@
-### 02 — Model-as-a-judge: when the judge is torn, it decomposes
+# 02 — Model-as-a-judge: when the judge is torn, it decomposes
 
 [`examples/02-judge-rubrics.ts`](../../examples/02-judge-rubrics.ts) — run with `npm run judge`.
 
@@ -16,7 +16,7 @@ So the judge does not look for a person — it asks a **narrower question**. Eac
 sub-rubric is a probe with a cost and an observation→verdict partition, and
 [`selectProbe`](../../src/information-gain.ts) picks which one to spend a call on.
 
-#### Different weightings, different rankings
+## Different weightings, different rankings
 
 The same five measurements, weighted two ways, do not agree:
 
@@ -43,7 +43,7 @@ Hard gates tripped (checked separately, never weight-averaged)
   ✗ model-c: invents policy (97.0%), claims an irreversible action (95.0%)
 ```
 
-#### The verdict distribution is computed, not asserted
+## The verdict distribution is computed, not asserted
 
 `factual` has four levels. Each level is pushed through that candidate's own composite
 and thresholds, and the level probabilities accumulate onto the resulting verdict:
@@ -62,7 +62,7 @@ because its other dimensions are weak enough that no factual score rescues it. T
 is a point mass, so no sub-rubric could change the verdict and none is run. That is a
 real and useful answer, and an argmax could not have supplied it.
 
-#### Decomposition changes a verdict — and, elsewhere, refuses
+## Decomposition changes a verdict — and, elsewhere, refuses
 
 `model-d` is torn. Three sub-rubrics are available; the one that wins costs **more** than
 either alternative and is chosen anyway, because selection is on gain per unit cost:
@@ -109,7 +109,7 @@ and the example prints it rather than hiding it.
 A tripped hard gate is not ambiguity, so `model-c` is never decomposed: "not a question of
 degree, so nothing to decompose".
 
-#### Why an argmax judge cannot do this
+## Why an argmax judge cannot do this
 
 Collapse `model-d`'s prior to its leading band and re-run the same selection:
 
@@ -129,7 +129,7 @@ which to prefer one narrower question over another.
 The claim is narrow: that is what a bare point estimate supplies. It is **not** a claim
 that a generative system cannot probe. One can be built to — just not from this input.
 
-#### Claims
+## Claims
 
 With explicit `JEV_MOCK=1`, this runs offline against scripted fixtures in
 [`src/mock-fetch.ts`](../../src/mock-fetch.ts), which manufacture HTTP responses on the

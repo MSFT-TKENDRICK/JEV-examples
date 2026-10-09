@@ -1,4 +1,4 @@
-### 06 — The same maze, twice
+# 06 — The same maze, twice
 
 [`examples/06-jev-vs-control.ts`](../../examples/06-jev-vs-control.ts) — the same
 fourteen-page maze and the same decision loop, walked twice:
@@ -12,9 +12,7 @@ npm run compare
 The Jev arm calls Vercel's live TypeSafe-compatible API by default with
 `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`. The generative control stays a
 disclosed scripted replay unless `AI_GATEWAY_GENERATIVE=1` explicitly enables
-potentially paid Gateway generation. Credentials for free Jev alone do not enable
-it. `JEV_MOCK=1` explicitly makes both arms fixtures.
-
+potentially paid Gateway generation. A Gateway credential alone does not enable it. `JEV_MOCK=1` explicitly makes both arms fixtures.
 **The excerpts below are scripted offline fixture output, and that control arm
 is an adversarial fixture rather than a fair benchmark.** Its replies are
 replayed, not generated, and they were written here. Live arms can receive
@@ -30,7 +28,7 @@ first distribution returned to the Jev arm with its point-mass version. That
 calculation uses the current run's response, not a fixed fixture prior. The output
 quoted below remains the historical fixture capture, not a hosted API result.
 
-#### What it may be read as showing
+## What it may be read as showing
 
 That two capabilities the application uses are arithmetic consequences of holding
 a distribution, and are unavailable without one: ranking an alternative to resume
@@ -42,7 +40,7 @@ the control arm is what a well-built generative agent looks like, that the outco
 gap measures capability, or that a maze authored in this repository measures
 anything about real websites.
 
-#### The outcome
+## The outcome
 
 ```
   jev       distribution over page elements, beam width 3
@@ -58,7 +56,7 @@ anything about real websites.
     outcome no_path
 ```
 
-#### The failure is attributable, not merely worse
+## The failure is attributable, not merely worse
 
 The control arm is deliberately given a good schema. It has `atTarget` and
 `deadEnd` fields, and it uses them correctly:
@@ -81,7 +79,7 @@ beam, so with a point estimate `k = 1` always, and
 [`frontier.best()`](../../src/frontier.ts) returns `null` the first time the only
 live path dies.
 
-#### Probe selection does not get harder — it gets worthless
+## Probe selection does not get harder — it gets worthless
 
 ```
        H(distribution) = 1.2279 bits      H(point estimate) = 0.0000 bits
@@ -101,7 +99,7 @@ EIG is **exactly zero for every probe** — not small, not noisy, zero.
 `selectProbe` has nothing to rank, and an agent built on it proceeds on the answer
 it already had, with extra machinery attached.
 
-#### The honest reading
+## The honest reading
 
 Quoted from the run itself:
 

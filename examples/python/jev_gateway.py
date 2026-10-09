@@ -42,7 +42,7 @@ def gateway_settings() -> dict[str, str]:
     )
     if not credential:
         raise ValueError(
-            "Set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN for free Jev through "
+            "Set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN for Jev through "
             "Vercel AI Gateway. No TYPESAFE_API_KEY is needed. Without Gateway "
             "access, JEV_BACKEND=local uses the local Laya proxy (not Jev)."
         )

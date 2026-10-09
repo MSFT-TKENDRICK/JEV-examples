@@ -86,7 +86,7 @@ function normalizeRounded(values: number[]): number[] {
 
 /**
  * Normalized-entropy stand-in for confidence: 1.0 when all mass sits on one
- * outcome. Real Jev calibrates this differently — see the README.
+ * outcome. Real Jev calibrates this differently — see docs/RUNNING.md.
  */
 function confidenceFrom(distribution: number[]): number {
   const size = distribution.length;

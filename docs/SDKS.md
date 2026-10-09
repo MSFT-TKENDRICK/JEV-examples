@@ -5,17 +5,19 @@ existing official `@typesafe-ai/sdk`. Vercel's
 [TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe)
 supports this directly. No direct TypeSafe account key or API endpoint is needed.
 
-**Repository requirement:** the default showcase must run real Jev through
-Vercel's free catalog offering, not the direct vendor API and not an implicit
-mock. Keep the published TypeSafe SDK on Vercel's supported compatibility route;
-do not introduce a hand-written protocol client or adapter to obtain Gateway
-access. The Vercel AI SDK remains the integration for optional generative arms.
+**Repository requirement:** the default examples must run real Jev through
+Vercel AI Gateway, not the direct vendor API and not an implicit mock. Keep the
+published TypeSafe SDK on Vercel's supported compatibility route; do not introduce
+a hand-written protocol client or adapter to obtain Gateway access. The Vercel AI
+SDK remains the integration for optional generative arms.
 
-As of **2026-09-22**, Vercel's
-[TypeSafe model catalog](https://vercel.com/ai-gateway/models/providers/typesafe-ai)
-lists Jev's input and output as **Free**. Authentication is still required.
-Check the catalog for current pricing and account limits; this is not a promise
-about future prices, other models, or infrastructure costs.
+As of **2026-10-08**, Vercel's
+[model page for Jev](https://vercel.com/ai-gateway/models/jev) lists
+**$0.042 per 1M input tokens** and a maximum output of 0 tokens. Earlier versions of
+this document said Jev was **Free** on Vercel as of 2026-09-22. That listing has
+changed. Authentication is still required. Check the catalog for current pricing and
+account limits; this is not a promise about future prices, other models, or
+infrastructure costs.
 
 ## 1. `@typesafe-ai/sdk` through Vercel — what this repo uses
 
@@ -53,9 +55,14 @@ answers.severity.legend;          // the rubric, keyed by score
 answers.wantsRefund.noul;         // 0..1
 ```
 
-The SDK still supplies literal-typed answers, retry handling, typed errors and
-the `systemOne()` request/response mapping. We are not replacing it with a
-hand-written HTTP client. The compatibility route preserves TypeSafe field names.
+The SDK still supplies literal-typed answers, retry handling, typed errors and the
+`systemOne()` request/response mapping. We are not replacing it with a hand-written
+HTTP client. The compatibility route preserves TypeSafe field names.
+
+The repository pins `@typesafe-ai/sdk` at `^0.6.0`. Version 0.6.0 accepts score
+criteria only as an array of at least two labels, ordered lowest to highest. The
+object form that 0.5.x accepted, such as `{ 0: 'none', 1: 'minor' }`, throws a
+`TypeSafeError`. Its response declarations match 0.5.7.
 
 ### Repository configuration
 
@@ -90,7 +97,7 @@ supplies manufactured responses while exercising the SDK code path. The SDK
 does not runtime-validate every response field, so fixture types and checks
 remain important.
 
-**Free Jev does not enable paid generation.** The proposer, triager and
+**A Gateway credential does not enable paid generation.** The proposer, triager and
 generative browser control replay disclosed scripted outputs by default, even
 when a Gateway credential is present. Only `AI_GATEWAY_GENERATIVE=1` opts those
 TypeScript arms into live generation; the chosen generative models can incur
@@ -98,31 +105,37 @@ charges. `JEV_MOCK=1` still forces fixtures.
 
 ## 2. Python integration
 
-See [`examples/python/`](../examples/python) for `langchain-typesafe` examples.
+See [`examples/python.md`](examples/python.md) for the `langchain-typesafe` examples.
 Their Jev client is also configured for Vercel's TypeSafe-compatible route with
 Gateway credentials, not direct TypeSafe authentication. `judge_rubric.py` needs
 only the Gateway credential. `langchain_harness.py` additionally requires
 `OPENAI_API_KEY` and invokes potentially paid OpenAI generation when run; this is
-separate from the free Jev catalog entry and from the TypeScript
-`AI_GATEWAY_GENERATIVE=1` switch. A Gateway credential alone cannot activate those
-OpenAI calls. Middleware APIs remain experimental in the pinned integration.
+separate from Jev's catalog pricing and from the TypeScript `AI_GATEWAY_GENERATIVE=1`
+switch. A Gateway credential alone cannot activate those OpenAI calls. Middleware APIs
+remain experimental in the pinned integration.
 
-## 3. Vercel evaluation API — an alternative, not a prerequisite
+A LangChain.js package also exists: `@langchain/typesafe` (npm, 0.0.2 as of
+2026-10-08). Its documented default reads a direct `TYPESAFE_API_KEY`, which this
+repository does not use. Evaluate it against the Gateway route before relying on it here.
 
-Vercel's [evaluation documentation](https://vercel.com/docs/ai-gateway/modalities/evaluation)
-describes evaluation through the AI SDK (`experimental_evaluate`, AI SDK 7 or
-later) and the public HTTP endpoint `POST https://ai-gateway.vercel.sh/v1/evaluate`.
-It also explicitly supports the TypeSafe-compatible route used here.
+## 3. Vercel Decision API — an alternative, not a prerequisite
 
-This repository does not need an `experimental_evaluate` export to call Jev
-through Gateway, nor does it depend on an internal evaluation wire protocol.
-For a new AI SDK integration, follow the current Vercel documentation and verify
-the exports of the package versions you install rather than relying on an old
-release-status table.
+Vercel now calls these models **decision models**; they were formerly *evaluation
+models*. Its [Decision documentation](https://vercel.com/docs/ai-gateway/modalities/decision)
+describes the AI SDK route as `experimental_decide`, which needs `ai` 7.0.128 or later.
+`experimental_evaluate` remains a deprecated alias. The public HTTP endpoint is still
+`POST https://ai-gateway.vercel.sh/v1/evaluate`, and the Decision API also supports
+the TypeSafe-compatible route used here.
+
+This repository does not need an `experimental_decide` or `experimental_evaluate`
+export to call Jev through Gateway, nor does it depend on an internal wire protocol.
+For a new AI SDK integration, follow the current Vercel documentation and verify the
+exports of the package versions you install. When this was checked (2026-10-08), the
+newest `ai` release on npm was 7.0.127, which does not yet provide `experimental_decide`.
 
 ### Naming differences
 
-| Concept | TypeSafe-compatible API used here | Vercel evaluation API |
+| Concept | TypeSafe-compatible API used here | Vercel Decision API |
 |---|---|---|
 | Yes/no question | `noul` | `boolean` |
 | Its answer field | `noul` | `probability` |
@@ -139,6 +152,6 @@ decision.
 ## Evidence boundary
 
 The route and pricing above are grounded in Vercel documentation and its model
-catalog, checked on 2026-09-22. They are not measurements from this repository.
+catalog, checked on 2026-10-08. They are not measurements from this repository.
 The committed output and recording remain explicit fixture captures. Live
 connectivity alone would not establish model quality, calibration or reliability.
