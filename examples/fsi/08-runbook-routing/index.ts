@@ -74,7 +74,7 @@
  * The arithmetic is real. Incident inputs are synthetic; Jev distributions are
  * live unless `JEV_MOCK=1` explicitly selects the scripted fixture transport.
  *
- * Run:  npm run fsi:08
+ * Run:  npm run fsi:runbook-routing
  */
 
 import { APIConnectionError, VERSION, choice, noul } from '@typesafe-ai/sdk';

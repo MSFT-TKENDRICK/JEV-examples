@@ -5,6 +5,10 @@ navigation task across a fourteen-page synthetic account portal, where the
 candidate set on every page is the page's own elements and uncertainty selects
 the next *machine* action rather than a person.
 
+**This example does not open a browser.** It walks the synthetic site in memory and
+prints text. To watch a browser being driven over the same site, run
+[example 05](05-browser-live.md), which opens Chrome.
+
 ```bash
 npm run browser
 ```

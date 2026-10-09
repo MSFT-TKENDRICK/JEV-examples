@@ -25,7 +25,7 @@
  * Snapshots are versioned because the version is load-bearing: a plan is frozen
  * against one version and revalidated against a fresh read immediately before it
  * runs, and the two are allowed to differ. See
- * `examples/fsi/07-next-step/plan.ts`.
+ * `examples/fsi/07-card-servicing/plan.ts`.
  *
  * ## The evidence sources
  *

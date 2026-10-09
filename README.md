@@ -10,28 +10,35 @@ Jev returns a probability distribution over a bounded set of options. The exampl
 show what application code does with that distribution: it probes for more evidence,
 acts reversibly and verifies the result, or refuses and changes nothing.
 
-> Example commands call **live Jev** by default and need a Vercel AI Gateway key.
-> Without one they fail with a setup error. They never fall back to simulated answers.
-> Scripted fixture runs are available with `npm run all:mock`. Jev is metered on
-> Vercel at $0.042 per 1M input tokens (checked 2026-10-08).
+> Example commands call **live Jev** when a Vercel AI Gateway key is set. With no key,
+> the npm example commands run on the local Laya proxy instead, and the output says it
+> is not Jev. They never run simulated answers unless you ask for fixtures with
+> `npm run all:mock`. Jev is metered on Vercel at $0.042 per 1M input tokens (checked
+> 2026-10-08).
 
 ## Quick start
 
-Requirements: Node.js 22.18 or later (CI runs Node 24), and a Vercel AI Gateway API
-key or `VERCEL_OIDC_TOKEN`. Example 05 also downloads Chrome and ffmpeg through
-`webreel` on first use.
+Requirements: Node.js 22.18 or later (CI runs Node 24). A Vercel AI Gateway API key or
+`VERCEL_OIDC_TOKEN` is optional, and selects Jev. Example 05 also downloads Chrome and
+ffmpeg through `webreel` on first use.
 
 ```bash
 npm ci
+npm run local-jev:install        # the local Laya runtime, used when there is no key
 cp .env.example .env             # PowerShell: Copy-Item .env.example .env
-# Edit .env and set AI_GATEWAY_API_KEY. Leave JEV_MOCK unset for live Jev.
+# Optional: set AI_GATEWAY_API_KEY in .env to run Jev instead of Laya.
 npm run quickstart
 ```
 
-Without Gateway access, [`local-jev/`](local-jev/README.md) is an opt-in local server
-with the same `/v1/systemone` API, backed by the open Laya model. It is **not Jev**.
-Set `JEV_BACKEND=local` to point the examples at it. Scripted fixtures are documented
-in [`docs/RUNNING.md`](docs/RUNNING.md).
+Without Gateway access, the examples run on the local Laya proxy. The launcher starts
+[`local-jev/`](local-jev/README.md) itself. It is an opt-in local server with the same
+`/v1/systemone` API, backed by the open Laya model. It is **not Jev**, and the output
+says so. To force it, run `npm run example -- examples/01-quickstart.ts --backend=local`.
+Scripted fixtures are documented in [`docs/RUNNING.md`](docs/RUNNING.md).
+
+In the GitHub Copilot desktop app, every example is a run button, configured in
+[`.github/github-app.yml`](.github/github-app.yml). See
+[the desktop app section of `docs/RUNNING.md`](docs/RUNNING.md#copilot-desktop-app).
 
 ## Examples
 
@@ -40,11 +47,17 @@ in [`docs/RUNNING.md`](docs/RUNNING.md).
 | [01 — Quickstart](docs/examples/01-quickstart.md) | `npm run quickstart` | One request with several typed questions; a flat answer selects the next probe |
 | [02 — Judge rubrics](docs/examples/02-judge-rubrics.md) | `npm run judge` | A torn verdict decomposes into narrower sub-rubrics |
 | [03 — Agent harness](docs/examples/03-agent-harness.md) | `npm run harness` | Probe, reversible action, or refusal; the irreversible step runs last |
-| [04 — Browser use](docs/examples/04-browser-use.md) | `npm run browser` | Choosing among a page's own elements, with backtracking |
-| [05 — Browser, live](docs/examples/05-browser-live.md) | `npm run record` | The same loop against real Chrome, recorded with `webreel` |
+| [04 — Browser use](docs/examples/04-browser-use.md) | `npm run browser` | Choosing among a page's own elements, with backtracking. Runs in memory and opens no browser |
+| [05 — Browser, live](docs/examples/05-browser-live.md) | `npm run record` | The same loop in a real Chrome window (`-- --no-video`), or recorded with `webreel` |
 | [06 — Jev vs control](docs/examples/06-jev-vs-control.md) | `npm run compare` | The same maze walked with a distribution and with a single answer |
-| [07 — Next step (FSI)](docs/examples/07-next-step.md) | `npm run fsi:07` | Bounded next-step recommendation for card servicing |
-| [08 — Runbook routing (FSI)](docs/examples/08-runbook-routing.md) | `npm run fsi:08` | Residual incident routing, with diagnostics chosen by expected information gain |
+| [07 — Card servicing (FSI)](docs/examples/07-card-servicing.md) | `npm run fsi:card-servicing` | Bounded next-step selection for card servicing, with verified rollback |
+| [08 — Runbook routing (FSI)](docs/examples/08-runbook-routing.md) | `npm run fsi:runbook-routing` | Residual incident routing, with diagnostics chosen by expected information gain |
+| [09 — Fraud triage (FSI)](docs/examples/09-fraud-alerts.md) | `npm run fsi:fraud-alerts` | Alert typology and priority, a what-if on a transaction field, and a customer-report tool shortlist. Nothing is closed, approved or run |
+| [10 — Insurance claims (FSI)](docs/examples/10-insurance-claims.md) | `npm run fsi:insurance-claims` | Claim type, lane and risk indicators. Nothing is paid |
+| [11 — Content safety (FSI)](docs/examples/11-content-safety.md) | `npm run fsi:content-safety` | Deterministic rules before a policy-clause choice; reversible visibility limits |
+| [12 — Compliance audit (FSI)](docs/examples/12-compliance-audit.md) | `npm run fsi:compliance-audit` | Evidence fields read deterministically, rubric ratings, and a draft assessment |
+| [13 — Semantic signals (FSI)](docs/examples/13-semantic-signals.md) | `npm run fsi:semantic-signals` | Intent features, knowledge-graph relations, and a gated two-step entity classification |
+| [14 — Search reranking (FSI)](docs/examples/14-search-rerank.md) | `npm run fsi:search-rerank` | Rules remove ineligible results, then a bounded choice reranks the rest |
 | [FSI evaluation](docs/examples/fsi-eval.md) | `npm run fsi:eval` | Offline threshold sweep over the 07 and 08 ledgers (fixtures only) |
 | [LangChain (Python)](docs/examples/python.md) | `pip install -r examples/python/requirements.txt` | `langchain-typesafe` classifier and middleware |
 
@@ -56,7 +69,8 @@ The index of write-ups is [`docs/examples/README.md`](docs/examples/README.md).
 |---|---|
 | `npm run quickstart`, `judge`, `harness`, `browser`, `compare` | Run examples 01–04 and 06 |
 | `npm run record` | Run example 05 in Chrome and write `docs/media/browser-use.mp4` |
-| `npm run fsi:07`, `fsi:08`, `fsi:eval` | Run the FSI examples and the threshold sweep |
+| `npm run fsi:card-servicing` through `fsi:search-rerank`, `fsi:eval` | Run the FSI examples (07–14) and the threshold sweep |
+| `npm run example -- <file> [--backend=gateway\|local\|mock] [args]` | Run one example on a named backend (see [`docs/RUNNING.md`](docs/RUNNING.md#choosing-a-backend)) |
 | `npm run all` | Run 01–04, 06, the FSI examples and the sweep against live Jev (excludes 05) |
 | `npm run all:mock` | The same suite on scripted fixtures, with no API key. This is what CI runs |
 | `npm run local-jev:install`, `local-jev`, `local-jev:parity` | Install, start and check the local Laya proxy (not Jev) |
@@ -86,7 +100,7 @@ and the mode rules are in [`docs/RUNNING.md`](docs/RUNNING.md) and
 ## Repository layout
 
 ```
-examples/          Runnable examples: 01–06 (TypeScript), fsi/ (07, 08 and eval), python/, site/
+examples/          Runnable examples: 01–06 (TypeScript), fsi/ (07–14 and eval), python/, site/
 src/               Shared code: client, fixtures, decision policy, ledger, act/verify/compensate runner
 local-jev/         Opt-in local proxy with the same wire API, backed by Laya (not Jev)
 scripts/           run-examples.ts, media-check.ts, check-docs.ts
@@ -123,7 +137,7 @@ runs. It is test infrastructure, not part of the live path.
 | [`docs/RUNNING.md`](docs/RUNNING.md) | Live and fixture runs, environment, the browser recording and known issues |
 | [`docs/SDKS.md`](docs/SDKS.md) | Which SDK and route to use, and the naming differences between APIs |
 | [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md) | What each example may and must not claim |
-| [`docs/FSI-BOUNDARIES.md`](docs/FSI-BOUNDARIES.md) | Where this pattern should not be used, and what the repository does not answer |
+| [`src/decision-loop.ts`](src/decision-loop.ts) | The probe, act and refuse loop shared by the FSI examples 09–14 |
 | [`local-jev/README.md`](local-jev/README.md) | The local Laya proxy: parity coverage, configuration and limits |
 
 ## Evidence boundary

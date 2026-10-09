@@ -1,6 +1,6 @@
-# 07 — Uncertainty selects the next machine action
+# 07 — Card servicing: bounded next-step selection
 
-`npm run fsi:07`
+`npm run fsi:card-servicing`
 
 This command uses live Jev through Vercel by default with `AI_GATEWAY_API_KEY`
 or `VERCEL_OIDC_TOKEN`.

@@ -61,8 +61,8 @@ export function isLiveJev(): boolean {
     throw new Error(
       'AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN is required for Jev through Vercel AI Gateway. ' +
         'No TYPESAFE_API_KEY is needed. ' +
-        'Set it in .env for npm run commands or export it in your environment. ' +
-        'Without Gateway access, JEV_BACKEND=local uses the local Laya proxy (npm run local-jev; not Jev). ' +
+        'Set it in .env or export it in your environment. ' +
+        'The npm example commands use the local Laya proxy when no key is set (not Jev). ' +
         'For scripted fixtures only (not model inference), explicitly set JEV_MOCK=1 ' +
         'or run npm run all:mock.',
     );

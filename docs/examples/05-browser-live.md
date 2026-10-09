@@ -7,8 +7,11 @@ fourteen-page site rendered to disk, recorded with
 
 ```bash
 npm run record                 # record to docs/media/browser-use.mp4
-npm run record -- --no-video    # drive the browser, skip the recording
+npm run record -- --no-video    # open a visible Chrome window and drive it; no video
 ```
+
+With `--no-video` a Chrome window opens and the cursor moves across the site on the
+screen. A recording run uses a headless build, so nothing appears on screen.
 
 **Judgements use live Jev through Vercel by default**, using `AI_GATEWAY_API_KEY`
 or `VERCEL_OIDC_TOKEN`. Only

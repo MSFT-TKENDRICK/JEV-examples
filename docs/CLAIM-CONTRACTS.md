@@ -9,9 +9,10 @@ The central discipline:
 > The examples prove what the application does with a distribution, not that the
 > distribution deserves trust.
 
-The runnable Jev integrations use Vercel's live TypeSafe-compatible API by default,
-with `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` and model `typesafe-ai/jev`.
-Explicit `JEV_MOCK=1` selects fixture responses; the
+The runnable Jev integrations use Vercel's live TypeSafe-compatible API when
+`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is set, with model `typesafe-ai/jev`.
+With no credential, the npm example commands run the local Laya proxy instead, and
+label every output as Laya, not Jev. Explicit `JEV_MOCK=1` selects fixture responses; the
 threshold sweep and fault-injection checks are intentionally fixture-only.
 Committed excerpts and the browser recording are fixture captures, not live
 evidence. These contracts still apply to live runs: connectivity and decisions on
@@ -98,7 +99,7 @@ review item and does not assume anyone is watching.
 
 ---
 
-## Example 07 — Bounded next-step recommendation
+## Example 07 — Card servicing: bounded next-step selection
 
 ### May claim
 
@@ -220,6 +221,99 @@ review item and does not assume anyone is watching.
    Choice over a poorly defined target is wrong regardless of its shape.
 
 ---
+
+## Examples 09-14 — industry scenarios
+
+These examples share the decision loop in `src/decision-loop.ts`. Each one is bound by
+the architecture contract above: uncertainty selects a probe, a reversible action, or a
+refusal, and never a person. Each one also has these scope limits.
+
+- None disposes of an alert, claim, post or record. Writes are reversible fields.
+- None pays, approves, denies, reports, publishes or sends anything.
+- None produces a forecast, an audit opinion, or a regulatory determination.
+- Every distribution is Jev's, and is uncalibrated. Fixtures are authored, and the
+  shipped fixture outputs are captures from scripted runs.
+
+### Example 09 — Fraud triage: alerts, transactions and customer reports
+
+May claim:
+- A probe reading a record can change the typology, and the changed typology is acted on.
+- A changed field, such as device trust, moves the distribution, and the run reports the move.
+- A deterministic check against KYC can refuse a confident "legitimate pattern" label.
+- Two leaders with the same name can differ in confidence, and only the confident one is acted on.
+- Several yes/no signals asked in one request can drive a written tool shortlist. No tool is run.
+- Completed alerts are ordered by priority and by the evidence the run gathered.
+
+Must not claim: that an alert or transaction is correct, suspicious, closed, cleared, approved
+or held; that the typologies are a regulatory taxonomy; that payee matching is entity
+resolution; that a tool was run or a reasoning model consulted. APPROVE, HOLD and CHALLENGE
+for transactions are not offered, because they are authorisation decisions. ESCALATE and
+analyst or sanctions routes are not offered, because they route to a person.
+
+### Example 10 — Insurance claims
+
+May claim:
+- Claim type can be classified with missing-document and fraud indicators asked in the same request.
+- A probe reading the claim history can change the classification.
+- A fraud indicator at or above 0.5 stops the automatic setting of a claim.
+- A failed write rolls back the writes that preceded it.
+- The lane outcomes are a standard label and a pending-documents label, and nothing else.
+
+Must not claim: that any claim is paid, approved, denied or fraudulent; that a lane is a
+payment decision; that indicators are calibrated or suitable for underwriting. ADJUSTER_REVIEW,
+SIU_REVIEW and TOTAL_LOSS_REVIEW are not offered, because they route to a person.
+
+### Example 11 — Content safety
+
+May claim:
+- A deterministic rule settles a card-number case before any model is asked.
+- A model's clause choice is bounded to the policy's own list.
+- An opt-out is accepted only when a rule also matches the text.
+- A probe on the sender's account age can change the clause.
+
+Must not claim: that a post is safe or unsafe or breaches a regulation; that the rules
+catch what they do not match; that a visibility limit removes anything; that this is a
+security boundary against injected content.
+
+### Example 12 — Compliance audit
+
+May claim:
+- Fields in evidence documents can be read deterministically and used by a gate.
+- A flat rating can be settled by reading the change sample.
+- Evidence older than 90 days is not recorded as a finding.
+- The draft assessment states what was and was not decided.
+
+Must not claim: that a control is effective or not; that a sample is representative; that
+the draft is an audit opinion; that a language model wrote its wording. The narrative is a
+template, and the draft is not published.
+
+### Example 13 — Semantic signals
+
+May claim:
+- An inquiry's intent can be classified with urgency and competitor signals asked alongside.
+- A probe can change the intent.
+- A contradiction signal stops a confident merge of two records.
+- A second classification step can be gated on the first.
+
+Must not claim: that a feature predicts demand; that a relation is true; that two records
+describe one entity; that staged edges are correct.
+
+### Example 14 — Search reranking
+
+May claim:
+- Ineligible results are removed by rules and never reach the model.
+- A flat choice among eligible documents can be settled by reading the current edition.
+- A rank written to a result list is verified by reading it back.
+
+Must not claim: that the first-ranked document answers the question correctly; that
+retrieval recall or search quality is improved.
+
+### Requested scope not implemented
+
+Routing an ambiguous case to an investigator, adjuster or reviewer, escalating a claim to
+a specialist, and any approval queue are not implemented. The architecture contract forbids
+routing uncertainty to a person, and these examples refuse instead, with the reason recorded.
+Changing that rule would be a change to this contract, not to an example.
 
 ## Ledger
 

@@ -25,8 +25,8 @@ export interface ExampleRun {
 const EXAMPLES = [
   {
     id: '07',
-    title: 'Bounded next-step recommendation',
-    script: 'examples/fsi/07-next-step/index.ts',
+    title: 'Card servicing: bounded next-step selection',
+    script: 'examples/fsi/07-card-servicing/index.ts',
   },
   {
     id: '08',

@@ -26,8 +26,8 @@ import {
   buildState,
   nextStepCriteria,
   NEXT_STEP_QUESTION,
-} from '../07-next-step/recommend.ts';
-import { CARD_IN_SCOPE, SCENARIOS, seed } from '../07-next-step/scenarios.ts';
+} from '../07-card-servicing/recommend.ts';
+import { CARD_IN_SCOPE, SCENARIOS, seed } from '../07-card-servicing/scenarios.ts';
 
 export interface Perturbation {
   label: string;

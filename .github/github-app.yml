@@ -1,0 +1,87 @@
+# Run buttons for the GitHub Copilot app. Commands run from the repository root.
+#
+# "Setup" runs when a session (worktree) is created. It installs the locked
+# dependencies and the local Laya runtime.
+#
+# Example buttons choose their backend the same way the npm commands do:
+#   - with AI_GATEWAY_API_KEY (or VERCEL_OIDC_TOKEN) set in .env, they call Jev
+#     through Vercel AI Gateway;
+#   - with no credential, they call the local Laya proxy (local-jev/), which is
+#     NOT Jev. The banner at the top of each run says which one answered.
+# .env is gitignored, so create it in each worktree.
+#
+# The Python harness (examples/python/langchain_harness.py) is not listed. It
+# makes paid OpenAI calls and needs OPENAI_API_KEY, and langchain-openai has no
+# Windows ARM64 wheel.
+
+scripts:
+  - name: Setup
+    command: npm ci && npm run local-jev:install
+    triggers:
+      - session.create
+
+  - name: "Python: install examples requirements"
+    command: npm run python:install
+
+  - name: "01 Quickstart"
+    command: npm run quickstart
+
+  - name: "02 Judge rubrics"
+    command: npm run judge
+
+  - name: "03 Agent harness"
+    command: npm run harness
+
+  # Walks a synthetic site in memory. It opens no browser and prints text only.
+  - name: "04 Browser use (offline, text only)"
+    command: npm run browser
+
+  # Opens a visible Chrome window and drives it over the same site. npm run record
+  # without --no-video would write docs/media/browser-use.mp4 and overwrite the
+  # committed capture, so --no-video is required here.
+  - name: "05 Browser use (real Chrome window)"
+    command: npm run record -- --no-video
+
+  - name: "06 Jev vs control"
+    command: npm run compare
+
+  - name: "07 Card servicing (FSI)"
+    command: npm run fsi:card-servicing
+
+  - name: "08 Runbook routing (FSI)"
+    command: npm run fsi:runbook-routing
+
+  - name: "09 Fraud triage (FSI)"
+    command: npm run fsi:fraud-alerts
+
+  - name: "10 Insurance claims (FSI)"
+    command: npm run fsi:insurance-claims
+
+  - name: "11 Content safety (FSI)"
+    command: npm run fsi:content-safety
+
+  - name: "12 Compliance audit (FSI)"
+    command: npm run fsi:compliance-audit
+
+  - name: "13 Semantic signals (FSI)"
+    command: npm run fsi:semantic-signals
+
+  - name: "14 Search reranking (FSI)"
+    command: npm run fsi:search-rerank
+
+  - name: "Python judge rubric"
+    command: npm run example -- examples/python/judge_rubric.py
+
+  # All examples except 05, in sequence. On the local Laya proxy this takes
+  # roughly 20 to 30 minutes.
+  - name: "All examples"
+    command: npm run all
+
+  - name: "Fixtures: all examples (no inference)"
+    command: npm run all:mock
+
+  - name: "Fixtures: FSI evaluation"
+    command: npm run fsi:eval
+
+  - name: "Check"
+    command: npm run check
