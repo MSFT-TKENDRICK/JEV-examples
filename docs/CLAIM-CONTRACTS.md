@@ -18,7 +18,7 @@ evidence. These contracts still apply to live runs: connectivity and decisions o
 synthetic scenarios do not establish calibration, reliability or production safety.
 
 Each contract below must be reproduced in the header comment of the example it
-governs and in that example's README section. If a sentence you want to write is
+governs and in that example's write-up under `docs/examples/`. If a sentence you want to write is
 not on the allowed list, it does not go in.
 
 ---

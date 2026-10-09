@@ -1,4 +1,4 @@
-### 01 — Quickstart: one request, five questions, and what the answer does next
+# 01 — Quickstart: one request, five questions, and what the answer does next
 
 [`examples/01-quickstart.ts`](../../examples/01-quickstart.ts) — run with `npm run quickstart`.
 
@@ -25,7 +25,7 @@ Routing a ticket to a team is the task. What is ruled out is using a person as t
 *answer to a flat distribution* — a triage queue, a shortlist for someone to pick from.
 Those resolve nothing; they relocate it.
 
-#### Ticket 1 — the probe changes the route
+## Ticket 1 — the probe changes the route
 
 `billing` leads at 42.0% over `technical` at 40.0%. `sales` and `other` fall below the
 15% contender floor, so the three-way follow-up is offered as a two-way one:
@@ -57,7 +57,7 @@ posterior is a point mass only because the authored partition says `charge_wrong
 `integration_failing` separate those two departments cleanly — that sharpness is a
 property of the fixture's partition, not evidence about the model.
 
-#### Ticket 2 — the budget runs out and nothing happens
+## Ticket 2 — the budget runs out and nothing happens
 
 The second ticket is torn between `other` (42.0%) and `billing` (34.0%) — the first and
 last options. This is why the fixture scripts an explicit distribution rather than a
@@ -90,10 +90,10 @@ both rather than only the flattering one.
 The probe costs and the answer/department partitions are authored; the arithmetic over
 them is not. In both of these runs the probe that won on gain-per-cost also happened to
 be the cheaper one — which on its own would leave open whether the selector is really
-just sorting by price. [Example 02](02.md) shows the converse, picking a 1.6-cost
+just sorting by price. [Example 02](02-judge-rubrics.md) shows the converse, picking a 1.6-cost
 sub-rubric over two 1.0-cost ones.
 
-#### Claims
+## Claims
 
 With explicit `JEV_MOCK=1`, this runs offline against scripted fixtures in
 [`src/mock-fetch.ts`](../../src/mock-fetch.ts), which manufacture HTTP responses on the

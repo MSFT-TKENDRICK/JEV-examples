@@ -7,11 +7,8 @@ on:
 
 jobs:
   check:
-    # Both line-ending conventions, deliberately. The README comparison in
-    # scripts/assemble-readme.ts built LF and compared it against a checkout
-    # that Git-for-Windows hands over as CRLF, so it reported drift that did
-    # not exist — and an ubuntu-only matrix could never have caught it, because
-    # the instrument was only ever exercised where it could not fail.
+    # Both operating systems, because Git for Windows checks out CRLF line
+    # endings and the checks read files from the working tree.
     strategy:
       fail-fast: false
       matrix:
@@ -33,15 +30,11 @@ jobs:
 
       - run: npm ci
 
-      # `check` runs typecheck first, then the three suites. The ordering is
-      # load-bearing: Node strips types without checking them, so a suite can
-      # print a full set of passing counters while a type error sits in the
-      # file it just executed.
+      # `check` runs typecheck first, then the suites and the docs link check.
+      # The ordering is load-bearing: Node strips types without checking them,
+      # so a suite can print a full set of passing counters while a type error
+      # sits in the file it just executed.
       - run: npm run check
 
       # CI opts into fixtures explicitly; ordinary example commands call real Jev.
       - run: npm run all:mock
-
-      # README.md is assembled from docs/fragments/. This fails if it was
-      # edited directly, or if a fragment's links no longer resolve.
-      - run: npm run readme:check

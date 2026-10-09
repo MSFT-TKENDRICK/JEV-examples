@@ -1,16 +1,17 @@
 """
 LangChain + Jev: a rubric judge.
 
-The official LangChain integration for TypeSafe is Python-only. There is no
-`@langchain/typesafe` on npm, so if you want Jev inside LangChain today, this is
-the language.
+This uses the Python LangChain integration for TypeSafe, `langchain-typesafe`. A
+LangChain.js package, `@langchain/typesafe`, also exists on npm, but it reads a direct
+TYPESAFE_API_KEY. This example uses the Vercel Gateway route instead.
 
     pip install "langchain-typesafe==0.0.1a3"
     export AI_GATEWAY_API_KEY=...
 
-VERCEL_OIDC_TOKEN is also supported. Jev uses Vercel AI Gateway's free
-typesafe-ai/jev catalog entry, not a direct TypeSafe account. An explicit
-TYPESAFE_DEFAULT_MODEL override may select a model with different pricing.
+VERCEL_OIDC_TOKEN is also supported. Jev is called through Vercel AI Gateway's
+typesafe-ai/jev entry, which is metered (see docs/JEV.md), not a direct TypeSafe
+account. An explicit TYPESAFE_DEFAULT_MODEL override may select a model with
+different pricing.
 
 Two naming differences from the Vercel AI SDK, which trip people up when they
 port code between the two:

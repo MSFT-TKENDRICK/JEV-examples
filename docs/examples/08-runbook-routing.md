@@ -1,4 +1,4 @@
-### 08 — Residual incident runbook routing, by expected information gain
+# 08 — Residual incident runbook routing, by expected information gain
 
 [`examples/fsi/08-runbook-routing/index.ts`](../../examples/fsi/08-runbook-routing/index.ts)
 — an overnight mainframe batch window produces sixteen incidents. Deterministic
@@ -28,7 +28,7 @@ arithmetic, not model accuracy. They are
 excerpts — intermediate lines are elided for length — but no quoted line has
 been edited.
 
-#### Uncertainty selects the next machine action
+## Uncertainty selects the next machine action
 
 When the distribution does not support acting, this example does exactly one of
 three things, and "hand it to someone" is not among them:
@@ -54,7 +54,7 @@ asked what a lookup can answer:
 In this run those five sources resolve **7 of 16** incidents with no request
 built at all, and the spool text never leaves the process for any of them.
 
-#### The distribution over remediations selects a diagnostic
+## The distribution over remediations selects a diagnostic
 
 This is the part worth reading closely. Jev is asked which *remediation* the
 evidence points to. What gets selected from the answer is which *diagnostic* to
@@ -94,7 +94,7 @@ authored — `DG-UPSTREAM-DEPGRAPH` walks the flow snapshot and reports what it
 finds, which is why the run labels it `[computed: …]` while every other
 observation is labelled `[authored: scripted by the fixture author]`.
 
-#### Cost-efficiency is not a tiebreak, it changes the answer
+## Cost-efficiency is not a tiebreak, it changes the answer
 
 Selection ranks on `gainPerCost`, so the sharpest diagnostic is frequently not
 the one to run. In `INC-4486` the split is 44% / 41% between a lock timeout and a
@@ -124,7 +124,7 @@ This is why the budget has two dimensions. `maxProbes` alone would make every
 diagnostic equally affordable and quietly remove the reason to rank on cost at
 all; `maxCostUnits` is what makes an expensive check something you can decline.
 
-#### A spent budget produces a refusal, not a deferral
+## A spent budget produces a refusal, not a deferral
 
 `INC-4484` runs three diagnostics, every one comes back negative, and the
 distribution never concentrates:
@@ -145,7 +145,7 @@ Note that the run records *what it could not afford* alongside what it ran. "The
 check that would have settled this cost 3 and we had 2 left" is the part a reader
 most wants to second-guess, so it is printed rather than filtered away.
 
-#### Acting is safe because acting is undoable
+## Acting is safe because acting is undoable
 
 `INC-4485` concentrates after one cheap probe, remediation runs, and its second
 step fails verification:
@@ -168,7 +168,7 @@ control flow over a simulated system — this shows that a failed verification
 triggers compensation correctly, not that any mainframe operation is reversible
 in practice.
 
-#### The safe path does not depend on Jev being right
+## The safe path does not depend on Jev being right
 
 `INC-4480` is scripted **confidently wrong**: 91% of the mass on a key-management
 remediation whose preconditions authoritative state does not satisfy.
@@ -190,7 +190,7 @@ The same discipline covers the transport. `INC-4481` returns HTTP 200 with no
 them at runtime, so the application validates before trusting any field.
 `INC-4482` times out. Both refuse.
 
-#### A point estimate cannot play this game at all
+## A point estimate cannot play this game at all
 
 Expected information gain is `H(prior) - E[H(posterior)]`. For a point mass,
 `H(prior) = 0`, and the posterior under any observation is the same point mass.
@@ -227,7 +227,7 @@ quantity being compared is identically zero. Every other example in this
 repository would still function with a point estimate and merely lose something;
 this one has no decision to make without a distribution.
 
-#### What the ledger keeps
+## What the ledger keeps
 
 Every decision record retains the full probe trail: the diagnostic run, its
 expected information gain computed *before* it ran, the prior entropy, the
@@ -242,7 +242,7 @@ The record also contrasts the entropy Bayes *predicted* against the entropy of
 the distribution the model actually returned on re-judgement, so an investigation
 is replayable and second-guessable rather than merely reported.
 
-#### Outcome
+## Outcome
 
 ```
 Summary
@@ -262,7 +262,7 @@ Summary
   zero incidents routed to a person: every outcome above is a machine action or a refusal
 ```
 
-#### What this does and does not show
+## What this does and does not show
 
 The control flow is real, and so is the entropy arithmetic over the inputs. The
 inputs are manufactured.

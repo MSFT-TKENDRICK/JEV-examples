@@ -1,7 +1,7 @@
 /**
  * Uses the TypeSafe SDK through Vercel AI Gateway's compatible API.
  *
- * Jev is listed as free in Vercel's catalog. Gateway authentication is still
+ * Jev is metered in Vercel's catalog (see docs/JEV.md). Gateway authentication is still
  * required; no direct TypeSafe account/key is needed. `JEV_BACKEND=local`
  * points the same SDK at the local Laya proxy in `local-jev/` — real model
  * inference with Jev's wire format, but not Jev, and labelled as such. Only
@@ -70,7 +70,7 @@ export function isLiveJev(): boolean {
   return true;
 }
 
-/** A free Jev credential must not silently enable paid generative models. */
+/** A Gateway credential must not silently enable paid generative models; only AI_GATEWAY_GENERATIVE=1 does. */
 export function isLiveGeneration(): boolean {
   if (process.env['JEV_MOCK'] === '1') return false;
   const enabled = process.env['AI_GATEWAY_GENERATIVE'];

@@ -75,7 +75,7 @@ try {
     questions: {
       route: choice('Which team?', { billing: 'payments', support: null, fraud: { signals: ['chargeback'] } }),
       urgency: score('How urgent?', ['low', null, { level: 'high' }]),
-      mapped: score('Mapped rubric', { 0: 'no', 1: 'yes' }),
+      mapped: score('Mapped rubric', ['no', 'yes']),
       churn: noul('Will they churn?'),
       dispute: noul(null, { true: 'they dispute', false: null }),
     },

@@ -52,8 +52,8 @@ export interface ControlArm {
  *
  * Offline always, deliberately: this arm exists to emit one specific malformed
  * proposal, and a live model would emit something else. Calling it "the control"
- * is already generous — it is a fixture wearing a control's clothes, and the
- * README fragment says so in those words.
+ * is already generous — it is a fixture wearing a control's clothes. The claim
+ * contract for example 07 (docs/CLAIM-CONTRACTS.md) requires saying so.
  */
 export function createControlArm(scripted: ToolCall): ControlArm {
   const replay = async (): Promise<LanguageModelV4GenerateResult> => ({

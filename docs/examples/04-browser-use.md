@@ -1,4 +1,4 @@
-### 04 — Browser use: pick an element, never invent one
+# 04 — Browser use: pick an element, never invent one
 
 [`examples/04-browser-use.ts`](../../examples/04-browser-use.ts) — a long-horizon
 navigation task across a fourteen-page synthetic account portal, where the
@@ -19,7 +19,7 @@ costs and the depth of the trap were all authored here — which means the
 difficulty was authored too. The fixture run demonstrates what the application does with
 a distribution. It does not demonstrate that the distribution deserves trust.
 
-#### What it may be read as showing
+## What it may be read as showing
 
 Options are the page's own elements, enumerated by the DOM before the model is
 asked; `none` is always available; a flat distribution triggers a read-only probe
@@ -35,7 +35,7 @@ estimates of anything, that a maze authored to be hard is evidence the model fou
 it hard, or that beam search plus EIG makes an agent safe. The binding list is
 [`docs/CLAIM-CONTRACTS.md`](../CLAIM-CONTRACTS.md).
 
-#### Uncertainty selects an action, not a person
+## Uncertainty selects an action, not a person
 
 Three routes exist when the distribution will not resolve, and none of them is a
 handoff:
@@ -49,7 +49,7 @@ handoff:
 There is no `escalate`, no `approval_required`, no queue. `Status` is
 `goal_reached | refused | probes_exhausted | no_path | max_steps`.
 
-#### Scenario A — the confident click is wrong
+## Scenario A — the confident click is wrong
 
 The highest-mass link on the landing page is "Account documents" at 0.62. It is
 wrong, and it takes three pages to prove it:
@@ -78,7 +78,7 @@ The run ends:
   frontier 2 open, 1 dead, 3 pruned holding 0.1515 of path mass, beam width 3
 ```
 
-#### Scenario B — probing changes the answer
+## Scenario B — probing changes the answer
 
 A different account renders different metadata, and the leading label is the wrong
 one. Two peeks, chosen by gain per unit cost, move the mass onto a different link
@@ -101,7 +101,7 @@ seen, `disabled-state` and `footer-legend` are worth **0.000** — they no longe
 discriminate between the two surviving candidates. That is the ranking doing
 work, not decoration.
 
-#### Scenario C — the refusal
+## Scenario C — the refusal
 
 A third account renders none of the metadata the peeks read, so every observation
 comes back `unknown` and [`posterior`](../../src/information-gain.ts) falls back
@@ -116,7 +116,7 @@ to the prior:
 
 Terminal. Not a queue, not an approval, not a person.
 
-#### The irreversible step
+## The irreversible step
 
 The re-issue form is submitted through
 [`src/compensate.ts`](../../src/compensate.ts), which rejects any plan whose

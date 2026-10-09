@@ -17,10 +17,10 @@ cheap, fast, structured judgment that gates an expensive, irreversible action.
     export OPENAI_API_KEY=...
 
 Caveats worth respecting:
-  - Jev uses the free typesafe-ai/jev entry through Vercel AI Gateway, with
+  - Jev is called through the typesafe-ai/jev entry on Vercel AI Gateway, with
     AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN. No direct TypeSafe key is needed.
-    The OpenAI generative models are separate PAID calls: this harness requires
-    an explicit OPENAI_API_KEY and is not an entirely free agent.
+    That route is metered. The OpenAI generative models are separate PAID calls:
+    this harness requires an explicit OPENAI_API_KEY and the agent is not free to run.
   - The package is alpha (0.0.1a3) and the middleware is explicitly
     experimental. Pin the version.
   - `AutoModeMiddleware` REFUSES risky calls; it returns an error ToolMessage.
@@ -149,9 +149,10 @@ def main() -> None:
     if not os.environ.get("OPENAI_API_KEY", "").strip():
         raise SystemExit(
             "Set OPENAI_API_KEY to opt into the paid OpenAI generative calls. "
-            "Only the default Jev classifier through Vercel AI Gateway is free."
+            "Only the Jev classifier through Vercel AI Gateway runs without OpenAI; "
+            "that route is metered, and the OpenAI calls are separately paid."
         )
-    print("Jev: free Gateway catalog model by default. OpenAI agent calls: paid.")
+    print("Jev: Gateway catalog model (metered). OpenAI agent calls: paid.")
 
     agent = create_agent(
         "openai:gpt-4o-mini",

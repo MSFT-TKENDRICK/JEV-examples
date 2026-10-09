@@ -5,7 +5,7 @@
  * had deleted and carried a caption describing behaviour the same rebuild had
  * removed, on the first screen of the README, for as long as it took someone to
  * pull an unrelated thread. Nothing caught it because nothing could: prose in
- * `docs/fragments/` is re-derived on every assembly and drifts loudly, while a
+ * `docs/examples/` is checked by `check:docs` and drifts loudly, while a
  * binary is inert and no check in this repository had any opinion about it.
  *
  * That is the general shape — the artefact's audience is human and the

@@ -79,7 +79,7 @@ export function fixtureTag(live: boolean): string {
 }
 
 /**
- * The disclosure as Markdown, so an example can emit a README fragment or a PR
+ * The disclosure as Markdown, so an example can emit a docs section or a PR
  * comment carrying the same wording as its terminal output.
  *
  * Ends with a blank line. Without it, CommonMark lazy continuation pulls the

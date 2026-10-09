@@ -24,10 +24,9 @@
     "check:local-jev": "node local-jev/app.check.ts",
     "check:foundation": "node src/ledger.check.ts && node src/information-gain.check.ts && node src/mock-fetch.check.ts && node src/compensate.check.ts && node src/frontier.check.ts",
     "check:eval": "node examples/fsi/eval/sweep.check.ts",
-    "check": "npm run typecheck && npm run check:client && npm run check:local-jev && npm run check:foundation && npm run check:eval && npm run check:media",
-    "readme": "node scripts/assemble-readme.ts",
-    "readme:check": "node scripts/assemble-readme.ts --check",
+    "check": "npm run typecheck && npm run check:client && npm run check:local-jev && npm run check:foundation && npm run check:eval && npm run check:media && npm run check:docs",
     "check:media": "node scripts/media-check.ts",
+    "check:docs": "node scripts/check-docs.ts",
     "local-jev:install": "npm install --prefix local-jev --no-package-lock --no-audit --no-fund",
     "local-jev": "node --env-file-if-exists=.env local-jev/main.ts",
     "local-jev:parity": "node --env-file-if-exists=.env local-jev/parity.ts",
@@ -41,7 +40,7 @@
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.81",
-    "@typesafe-ai/sdk": "^0.5.7",
+    "@typesafe-ai/sdk": "^0.6.0",
     "ai": "^7.0.101",
     "zod": "^4.6.5"
   }
