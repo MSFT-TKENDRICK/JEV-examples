@@ -5,33 +5,60 @@ how to configure them, and the known problems with the browser recording. The
 README has the short version; the per-example write-ups are in
 [`examples/`](examples/README.md).
 
+## Choosing a backend
+
+Every example runs on one of three backends. The backend is named explicitly. No
+run falls back to another one.
+
+| Backend | What answers | Needs | Labelled as |
+|---|---|---|---|
+| `gateway` (default) | Jev, through Vercel AI Gateway | `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | Jev |
+| `local` | The local Laya proxy in [`local-jev/`](../local-jev/README.md). Same API, different model | Nothing beyond `npm run local-jev:install` | Laya, not Jev |
+| `mock` | Scripted fixtures, no inference | Nothing | fixture |
+
+Run one example on a chosen backend with the launcher:
+
+```bash
+npm run example -- examples/01-quickstart.ts --backend=local
+npm run example -- examples/python/judge_rubric.py --backend=local
+npm run example -- examples/05-browser-live.ts --backend=local --no-video
+```
+
+With `--backend=local` the launcher starts the proxy and stops it when the example
+ends. If a proxy already answers at `LOCAL_JEV_URL`, the launcher uses that one. The
+first start loads the 1.7 GB model from `~/.cache/receptron-laya`, which is downloaded
+on first use. Local answers differ from Jev's, so a local run can reach a different
+route or a refusal. That is expected, and the output says which model answered.
+
+The launcher loads `.env` before it starts the example. Python examples receive the
+same environment, so `AI_GATEWAY_API_KEY` in `.env` reaches them too. Set `JEV_PYTHON`
+to choose the interpreter. The default is `python` on Windows and `python3` elsewhere.
+
 ## Copilot desktop app
 
 [`.github/github-app.yml`](../.github/github-app.yml) defines run buttons for the
-GitHub Copilot app. Each example command appears as a button, and the **Setup**
-script runs `npm ci` when a new session (worktree) is created.
+GitHub Copilot app. Each button is named with its backend. **Setup** runs `npm ci`
+and `npm run local-jev:install` when a new session (worktree) is created.
 
-| Button | Runs | Needs a key |
+| Button | Runs | Needs |
 |---|---|---|
-| 01–04, 06, 07, 08 | The matching `npm run` command, live | Yes |
-| 05 Browser live (no video) | `npm run record -- --no-video` | Yes |
-| FSI evaluation (fixtures) | `npm run fsi:eval` | No |
-| All examples (live) | `npm run all` | Yes |
-| All examples (fixtures) | `npm run all:mock` | No |
-| Check | `npm run check` | No |
+| Live: 01–08, all examples | The `npm run` command, against Jev | `AI_GATEWAY_API_KEY` in `.env` |
+| Live: 05 Browser (no video) | `npm run record -- --no-video` | `AI_GATEWAY_API_KEY` in `.env` |
+| Local: 01–08 and Python judge | `npm run example -- <file> --backend=local` | Nothing (Laya, not Jev) |
+| Python: install examples requirements | `npm run python:install` | Python on `PATH` |
+| Fixtures: all examples, FSI evaluation | `npm run all:mock`, `npm run fsi:eval` | Nothing |
+| Check | `npm run check` | Nothing |
 
-Live buttons read `.env` through the npm scripts. `.env` is gitignored, so create it
-in each worktree (copy `.env.example` and set `AI_GATEWAY_API_KEY`). Without it the
-button stops with the setup error.
+`.env` is gitignored, so create it in each worktree by copying `.env.example`.
 
 The app buttons do not run the video recording. `npm run record` writes
 `docs/media/browser-use.mp4`, which replaces the committed fixture capture. Run it from
 a terminal when you want a new recording.
 
-The Python examples are not in the app. They do not read `.env`, so export
-`AI_GATEWAY_API_KEY` in your shell before running them. See [`examples/python.md`](examples/python.md).
-The LangChain harness is also left out, because with `OPENAI_API_KEY` set it makes
-paid OpenAI calls.
+The LangChain harness is not in the app. It needs `OPENAI_API_KEY` and makes paid
+OpenAI calls. Its dependencies are in `examples/python/requirements-harness.txt`,
+which pulls in `tiktoken`. That package has no Windows ARM64 wheel, so the harness
+will not install on that platform.
 
 ## Live Jev by default
 

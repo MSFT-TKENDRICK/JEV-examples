@@ -19,6 +19,8 @@
     "fsi:eval": "node --env-file-if-exists=.env examples/fsi/eval/index.ts",
     "all": "node --env-file-if-exists=.env scripts/run-examples.ts",
     "all:mock": "node --env-file-if-exists=.env scripts/run-examples.ts --mock",
+    "example": "node --env-file-if-exists=.env scripts/run-example.ts",
+    "python:install": "python -m pip install -r examples/python/requirements.txt",
     "typecheck": "tsc -p tsconfig.json",
     "check:client": "node src/client.check.ts",
     "check:local-jev": "node local-jev/app.check.ts",

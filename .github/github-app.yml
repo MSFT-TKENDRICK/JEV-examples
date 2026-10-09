@@ -1,52 +1,89 @@
 # Run buttons for the GitHub Copilot app. Commands run from the repository root.
 #
-# "Setup" runs when a session (worktree) is created and installs the locked
-# dependencies. Every other script is a manual run button.
+# "Setup" runs when a session (worktree) is created. It installs the locked
+# dependencies and the local Laya runtime.
 #
-# Live examples call Jev through Vercel AI Gateway and need AI_GATEWAY_API_KEY
-# (or VERCEL_OIDC_TOKEN) in .env, which is gitignored and must exist in each
-# worktree. "All examples (fixtures)" and "Check" need no key.
+# Three kinds of run, named by prefix:
+#   Live:      calls Jev through Vercel AI Gateway. Needs AI_GATEWAY_API_KEY in
+#              .env. .env is gitignored, so create it in each worktree.
+#   Local:     calls the local Laya proxy (local-jev/). No key. This is NOT Jev,
+#              and every banner says so. The launcher starts the proxy itself.
+#   Fixtures:  scripted responses. No key, no inference.
+#
+# The Python harness (examples/python/langchain_harness.py) is not listed. It
+# makes paid OpenAI calls and needs OPENAI_API_KEY, and langchain-openai has no
+# Windows ARM64 wheel.
 
 scripts:
   - name: Setup
-    command: npm ci
+    command: npm ci && npm run local-jev:install
     triggers:
       - session.create
 
-  - name: 01 Quickstart
+  - name: "Python: install examples requirements"
+    command: npm run python:install
+
+  - name: "Live: 01 Quickstart"
     command: npm run quickstart
 
-  - name: 02 Judge rubrics
+  - name: "Live: 02 Judge rubrics"
     command: npm run judge
 
-  - name: 03 Agent harness
+  - name: "Live: 03 Agent harness"
     command: npm run harness
 
-  - name: 04 Browser use
+  - name: "Live: 04 Browser use"
     command: npm run browser
 
   # Drives real Chrome without recording. Recording (npm run record) writes
   # docs/media/browser-use.mp4 and would overwrite the committed capture.
-  - name: 05 Browser live (no video)
+  - name: "Live: 05 Browser (no video)"
     command: npm run record -- --no-video
 
-  - name: 06 Jev vs control
+  - name: "Live: 06 Jev vs control"
     command: npm run compare
 
-  - name: 07 Next step (FSI)
+  - name: "Live: 07 Next step (FSI)"
     command: npm run fsi:07
 
-  - name: 08 Runbook routing (FSI)
+  - name: "Live: 08 Runbook routing (FSI)"
     command: npm run fsi:08
 
-  - name: FSI evaluation (fixtures)
-    command: npm run fsi:eval
-
-  - name: All examples (live)
+  - name: "Live: all examples"
     command: npm run all
 
-  - name: All examples (fixtures)
+  - name: "Local: 01 Quickstart"
+    command: npm run example -- examples/01-quickstart.ts --backend=local
+
+  - name: "Local: 02 Judge rubrics"
+    command: npm run example -- examples/02-judge-rubrics.ts --backend=local
+
+  - name: "Local: 03 Agent harness"
+    command: npm run example -- examples/03-agent-harness.ts --backend=local
+
+  - name: "Local: 04 Browser use"
+    command: npm run example -- examples/04-browser-use.ts --backend=local
+
+  - name: "Local: 05 Browser (no video)"
+    command: npm run example -- examples/05-browser-live.ts --backend=local --no-video
+
+  - name: "Local: 06 Jev vs control"
+    command: npm run example -- examples/06-jev-vs-control.ts --backend=local
+
+  - name: "Local: 07 Next step (FSI)"
+    command: npm run example -- examples/fsi/07-next-step/index.ts --backend=local
+
+  - name: "Local: 08 Runbook routing (FSI)"
+    command: npm run example -- examples/fsi/08-runbook-routing/index.ts --backend=local
+
+  - name: "Local: Python judge rubric"
+    command: npm run example -- examples/python/judge_rubric.py --backend=local
+
+  - name: "Fixtures: all examples"
     command: npm run all:mock
 
-  - name: Check
+  - name: "Fixtures: FSI evaluation"
+    command: npm run fsi:eval
+
+  - name: "Check"
     command: npm run check

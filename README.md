@@ -28,10 +28,11 @@ cp .env.example .env             # PowerShell: Copy-Item .env.example .env
 npm run quickstart
 ```
 
-Without Gateway access, [`local-jev/`](local-jev/README.md) is an opt-in local server
-with the same `/v1/systemone` API, backed by the open Laya model. It is **not Jev**.
-Set `JEV_BACKEND=local` to point the examples at it. Scripted fixtures are documented
-in [`docs/RUNNING.md`](docs/RUNNING.md).
+Without Gateway access, run any example on the local Laya proxy with
+`npm run example -- examples/01-quickstart.ts --backend=local`. The launcher starts
+[`local-jev/`](local-jev/README.md) itself. It is an opt-in local server with the same
+`/v1/systemone` API, backed by the open Laya model. It is **not Jev**, and the output
+says so. Scripted fixtures are documented in [`docs/RUNNING.md`](docs/RUNNING.md).
 
 In the GitHub Copilot desktop app, every example is a run button, configured in
 [`.github/github-app.yml`](.github/github-app.yml). See
@@ -61,6 +62,7 @@ The index of write-ups is [`docs/examples/README.md`](docs/examples/README.md).
 | `npm run quickstart`, `judge`, `harness`, `browser`, `compare` | Run examples 01–04 and 06 |
 | `npm run record` | Run example 05 in Chrome and write `docs/media/browser-use.mp4` |
 | `npm run fsi:07`, `fsi:08`, `fsi:eval` | Run the FSI examples and the threshold sweep |
+| `npm run example -- <file> [--backend=gateway\|local\|mock] [args]` | Run one example on a named backend (see [`docs/RUNNING.md`](docs/RUNNING.md#choosing-a-backend)) |
 | `npm run all` | Run 01–04, 06, the FSI examples and the sweep against live Jev (excludes 05) |
 | `npm run all:mock` | The same suite on scripted fixtures, with no API key. This is what CI runs |
 | `npm run local-jev:install`, `local-jev`, `local-jev:parity` | Install, start and check the local Laya proxy (not Jev) |

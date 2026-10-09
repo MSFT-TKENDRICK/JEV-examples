@@ -42,14 +42,34 @@ service:
 ## Install and test
 
 ```bash
-pip install -r examples/python/requirements.txt
+npm run python:install                              # judge: requirements.txt
+python -m pip install -r examples/python/requirements-harness.txt   # harness only
 python -B -m unittest discover -s examples/python -p "test_*.py"
 ```
+
+`requirements.txt` holds only `langchain-typesafe`, which the rubric judge needs.
+`requirements-harness.txt` adds `langchain` and `langchain-openai` for the harness.
+`langchain-openai` depends on `tiktoken`, which has no Windows ARM64 wheel, so the
+harness will not install on that platform. The judge installs everywhere.
 
 The requirements pin `langchain-typesafe[experimental]==0.0.1a3`. That is the
 latest release on PyPI as of 2026-10-08 (earlier releases: `0.0.1a1`, `0.0.1a2`).
 It is alpha, the middleware module is explicitly experimental, and the package has
 had one breaking change already, so keep the pin.
+
+## Running them
+
+Run through the launcher so the Python process gets the same `.env` as the
+TypeScript examples, and so `--backend=local` starts the Laya proxy:
+
+```bash
+npm run example -- examples/python/judge_rubric.py --backend=local
+npm run example -- examples/python/judge_rubric.py                  # live, needs a Gateway key
+```
+
+The judge runs on the local Laya proxy in about 50 seconds on a Windows ARM64 laptop
+(three candidates, six questions each). The harness is not runnable without an
+OpenAI key, which is a paid generative model.
 
 `AutoModeMiddleware` **refuses** a risky call with an error `ToolMessage`; it does
 not prompt. Pair it with human-in-the-loop middleware if you want a person in the
