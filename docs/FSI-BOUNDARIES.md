@@ -149,6 +149,24 @@ routinely contains instructions. **A sharp probability is not a security
 boundary.** The real mitigations are architectural: treat content as data, apply
 least privilege, allowlist egress, track taint, and sandbox execution.
 
+## Examples 09 to 14, and the boundary they keep
+
+Examples 09 to 14 are bounded to the uses this document permits. Each one writes
+reversible fields and refuses rather than disposing. None of them:
+
+- closes, clears, reports or dispositions an alert, claim or post (the AML and payment
+  prohibitions above apply in full);
+- pays, approves, denies or sends anything;
+- routes an uncertain case to a person (see the architecture contract in
+  [`CLAIM-CONTRACTS.md`](CLAIM-CONTRACTS.md));
+- decides scope, suitability or authorisation: the fraud, claims, content and audit examples
+  read records and rules, and the rules are authored;
+- produces a forecast, a regulatory determination or an audit opinion.
+
+The alert and claim examples prioritise and label. The content example limits visibility
+and sets a suppression flag, both reversible. The audit example drafts text that is not
+published. The search example ranks a list for display.
+
 ## Candidates considered and rejected
 
 Two adversarial design reviews cut a nine-scenario slate to two examples. The

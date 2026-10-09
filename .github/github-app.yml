@@ -36,26 +36,44 @@ scripts:
   - name: "04 Browser use (offline, text only)"
     command: npm run browser
 
-  # Opens a visible Chrome window and drives it over the same site (npm run
-  # record would record video into docs/media and overwrite the committed
-  # capture, so --no-video is required here).
+  # Opens a visible Chrome window and drives it over the same site. npm run record
+  # without --no-video would write docs/media/browser-use.mp4 and overwrite the
+  # committed capture, so --no-video is required here.
   - name: "05 Browser use (real Chrome window)"
     command: npm run record -- --no-video
 
   - name: "06 Jev vs control"
     command: npm run compare
 
-  - name: "07 Next step (FSI)"
-    command: npm run fsi:07
+  - name: "07 Card servicing (FSI)"
+    command: npm run fsi:card-servicing
 
   - name: "08 Runbook routing (FSI)"
-    command: npm run fsi:08
+    command: npm run fsi:runbook-routing
+
+  - name: "09 Fraud and AML alerts (FSI)"
+    command: npm run fsi:fraud-alerts
+
+  - name: "10 Insurance claims (FSI)"
+    command: npm run fsi:insurance-claims
+
+  - name: "11 Content safety (FSI)"
+    command: npm run fsi:content-safety
+
+  - name: "12 Compliance audit (FSI)"
+    command: npm run fsi:compliance-audit
+
+  - name: "13 Semantic signals (FSI)"
+    command: npm run fsi:semantic-signals
+
+  - name: "14 Search reranking (FSI)"
+    command: npm run fsi:search-rerank
 
   - name: "Python judge rubric"
     command: npm run example -- examples/python/judge_rubric.py
 
   # All examples except 05, in sequence. On the local Laya proxy this takes
-  # about 25 minutes.
+  # roughly 20 to 30 minutes.
   - name: "All examples"
     command: npm run all
 

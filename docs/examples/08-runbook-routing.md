@@ -8,7 +8,7 @@ is ambiguous, the distribution selects a read-only **diagnostic** runbook to run
 next. Never a person.
 
 ```
-npm run fsi:08
+npm run fsi:runbook-routing
 ```
 
 The command uses **live Jev through Vercel by default** with `AI_GATEWAY_API_KEY`

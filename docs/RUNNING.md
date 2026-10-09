@@ -55,10 +55,15 @@ in `.env` they run Jev, and without one they run the local Laya proxy and say so
 
 | Button | Runs | Backend |
 |---|---|---|
+| 01 Quickstart | `npm run quickstart` | Jev if a key is set, otherwise Laya |
+| 02 Judge rubrics | `npm run judge` | Jev if a key is set, otherwise Laya |
+| 03 Agent harness | `npm run harness` | Jev if a key is set, otherwise Laya |
 | 04 Browser use (offline, text only) | `npm run browser`. A walk of a synthetic site in memory. It opens no browser | Jev if a key is set, otherwise Laya |
 | 05 Browser use (real Chrome window) | `npm run record -- --no-video`. Opens a visible Chrome window and drives it | Jev if a key is set, otherwise Laya |
+| 06 Jev vs control | `npm run compare` | Jev if a key is set, otherwise Laya |
+| 07 to 14 (FSI) | `npm run fsi:card-servicing`, `fsi:runbook-routing`, `fsi:fraud-alerts`, `fsi:insurance-claims`, `fsi:content-safety`, `fsi:compliance-audit`, `fsi:semantic-signals`, `fsi:search-rerank` | Jev if a key is set, otherwise Laya |
 | Python judge rubric | `npm run example -- examples/python/judge_rubric.py` | Jev if a key is set, otherwise Laya |
-| All examples | `npm run all` (excludes 05) | Jev if a key is set, otherwise Laya. Takes about 25 minutes on Laya |
+| All examples | `npm run all` (excludes 05) | Jev if a key is set, otherwise Laya. Roughly 20 to 30 minutes on Laya |
 | Python: install examples requirements | `npm run python:install` | Python on `PATH` |
 | Fixtures: all examples, FSI evaluation | `npm run all:mock`, `npm run fsi:eval` | Fixtures, no inference |
 | Check | `npm run check` | None |

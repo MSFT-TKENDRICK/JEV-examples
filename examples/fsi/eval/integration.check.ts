@@ -128,7 +128,7 @@ export async function checkIntegration(): Promise<void> {
     assert.equal(lines[0].mode, 'LIVE_API');
     assert(lines.slice(1).every((line) => line.model === 'loopback-regression-model'));
 
-    for (const id of ['07-next-step', '08-runbook-routing']) {
+    for (const id of ['07-card-servicing', '08-runbook-routing']) {
       const before: number = requests.length;
       const ledger = join(directory, `${id}.jsonl`);
       await execute(process.execPath, [join('examples', 'fsi', id, 'index.ts')], {
@@ -152,7 +152,7 @@ export async function checkIntegration(): Promise<void> {
     }
 
     responseStatus = 401;
-    for (const id of ['07-next-step', '08-runbook-routing']) {
+    for (const id of ['07-card-servicing', '08-runbook-routing']) {
       await assert.rejects(
         execute(process.execPath, [join('examples', 'fsi', id, 'index.ts')], {
           env: { ...process.env, JEV_LEDGER_FILE: join(directory, `${id}-failure.jsonl`) },

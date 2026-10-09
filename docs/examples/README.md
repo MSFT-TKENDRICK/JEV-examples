@@ -10,13 +10,19 @@ and [`../FSI-BOUNDARIES.md`](../FSI-BOUNDARIES.md).
 | 01 — Quickstart | `npm run quickstart` | [01-quickstart.md](01-quickstart.md): one request with several typed questions; a flat answer selects the next probe |
 | 02 — Judge rubrics | `npm run judge` | [02-judge-rubrics.md](02-judge-rubrics.md): a torn verdict decomposes into narrower sub-rubrics |
 | 03 — Agent harness | `npm run harness` | [03-agent-harness.md](03-agent-harness.md): probe, reversible act, or refuse; the irreversible step runs last |
-| 04 — Browser use | `npm run browser` | [04-browser-use.md](04-browser-use.md): choosing among a page's own elements, with backtracking |
-| 05 — Browser, live | `npm run record` | [05-browser-live.md](05-browser-live.md): the same loop against real Chrome, recorded with webreel |
+| 04 — Browser use | `npm run browser` | [04-browser-use.md](04-browser-use.md): choosing among a page's own elements, with backtracking. Runs in memory and opens no browser |
+| 05 — Browser, live | `npm run record -- --no-video` | [05-browser-live.md](05-browser-live.md): the same loop in a real Chrome window, or recorded with webreel |
 | 06 — Jev vs control | `npm run compare` | [06-jev-vs-control.md](06-jev-vs-control.md): the same maze walked with a distribution and with a single answer |
-| 07 — Next step (FSI) | `npm run fsi:07` | [07-next-step.md](07-next-step.md): bounded next-step recommendation for card servicing |
-| 08 — Runbook routing (FSI) | `npm run fsi:08` | [08-runbook-routing.md](08-runbook-routing.md): residual incident routing; diagnostics chosen by expected information gain |
+| 07 — Card servicing (FSI) | `npm run fsi:card-servicing` | [07-card-servicing.md](07-card-servicing.md): bounded next-step selection for card servicing, with verified rollback |
+| 08 — Runbook routing (FSI) | `npm run fsi:runbook-routing` | [08-runbook-routing.md](08-runbook-routing.md): residual incident routing; diagnostics chosen by expected information gain |
+| 09 — Fraud and AML alerts (FSI) | `npm run fsi:fraud-alerts` | [09-fraud-alerts.md](09-fraud-alerts.md): typology and priority for alerts, with KYC checks; nothing is closed |
+| 10 — Insurance claims (FSI) | `npm run fsi:insurance-claims` | [10-insurance-claims.md](10-insurance-claims.md): claim type, lane and risk indicators; nothing is paid |
+| 11 — Content safety (FSI) | `npm run fsi:content-safety` | [11-content-safety.md](11-content-safety.md): deterministic rules before a clause choice; reversible visibility limits |
+| 12 — Compliance audit (FSI) | `npm run fsi:compliance-audit` | [12-compliance-audit.md](12-compliance-audit.md): evidence fields read deterministically, rubric ratings, and a draft assessment |
+| 13 — Semantic signals (FSI) | `npm run fsi:semantic-signals` | [13-semantic-signals.md](13-semantic-signals.md): intent features, knowledge-graph relations, and a gated two-step entity classification |
+| 14 — Search reranking (FSI) | `npm run fsi:search-rerank` | [14-search-rerank.md](14-search-rerank.md): rules remove ineligible results, then a bounded choice reranks the rest |
 | FSI evaluation | `npm run fsi:eval` | [fsi-eval.md](fsi-eval.md): an offline threshold sweep over the 07 and 08 ledgers |
-| LangChain (Python) | `pip install -r examples/python/requirements.txt` | [python.md](python.md): `langchain-typesafe` classifier and middleware |
+| LangChain (Python) | `npm run python:install`, then `npm run example -- examples/python/judge_rubric.py` | [python.md](python.md): `langchain-typesafe` classifier and middleware |
 
 ## Reading the output
 
@@ -43,13 +49,24 @@ and [`../FSI-BOUNDARIES.md`](../FSI-BOUNDARIES.md).
 
 ## The FSI examples
 
-Examples 07 and 08 and the evaluation harness are written to a stricter standard
-than examples 01–06. Every decision is written to a JSONL ledger, each run
-identifies its live or scripted mode, and no example claims that a distribution
-deserves trust. They show what the surrounding application does with one.
+Examples 07 and 08 write a JSONL decision ledger, and the evaluation harness reads
+those ledgers. Examples 09 to 14 share one decision loop
+([`src/decision-loop.ts`](../../src/decision-loop.ts)) and print a trace and a
+summary. They do not write a ledger. Across the FSI examples, each run identifies its
+live or scripted mode, and no example claims that a distribution deserves trust. They
+show what the surrounding application does with one.
 
 ```bash
-npm run fsi:07
-npm run fsi:08
+npm run fsi:card-servicing
+npm run fsi:runbook-routing
+npm run fsi:fraud-alerts
+npm run fsi:insurance-claims
+npm run fsi:content-safety
+npm run fsi:compliance-audit
+npm run fsi:semantic-signals
+npm run fsi:search-rerank
 npm run fsi:eval
 ```
+
+`npm run check:fsi-examples` runs examples 09 to 14 against their fixtures in process
+and checks each scenario against the outcome it declares.

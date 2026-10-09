@@ -50,8 +50,14 @@ In the GitHub Copilot desktop app, every example is a run button, configured in
 | [04 — Browser use](docs/examples/04-browser-use.md) | `npm run browser` | Choosing among a page's own elements, with backtracking. Runs in memory and opens no browser |
 | [05 — Browser, live](docs/examples/05-browser-live.md) | `npm run record` | The same loop in a real Chrome window (`-- --no-video`), or recorded with `webreel` |
 | [06 — Jev vs control](docs/examples/06-jev-vs-control.md) | `npm run compare` | The same maze walked with a distribution and with a single answer |
-| [07 — Next step (FSI)](docs/examples/07-next-step.md) | `npm run fsi:07` | Bounded next-step recommendation for card servicing |
-| [08 — Runbook routing (FSI)](docs/examples/08-runbook-routing.md) | `npm run fsi:08` | Residual incident routing, with diagnostics chosen by expected information gain |
+| [07 — Card servicing (FSI)](docs/examples/07-card-servicing.md) | `npm run fsi:card-servicing` | Bounded next-step selection for card servicing, with verified rollback |
+| [08 — Runbook routing (FSI)](docs/examples/08-runbook-routing.md) | `npm run fsi:runbook-routing` | Residual incident routing, with diagnostics chosen by expected information gain |
+| [09 — Fraud and AML alerts (FSI)](docs/examples/09-fraud-alerts.md) | `npm run fsi:fraud-alerts` | Typology and priority for alerts, with KYC checks. Nothing is closed |
+| [10 — Insurance claims (FSI)](docs/examples/10-insurance-claims.md) | `npm run fsi:insurance-claims` | Claim type, lane and risk indicators. Nothing is paid |
+| [11 — Content safety (FSI)](docs/examples/11-content-safety.md) | `npm run fsi:content-safety` | Deterministic rules before a policy-clause choice; reversible visibility limits |
+| [12 — Compliance audit (FSI)](docs/examples/12-compliance-audit.md) | `npm run fsi:compliance-audit` | Evidence fields read deterministically, rubric ratings, and a draft assessment |
+| [13 — Semantic signals (FSI)](docs/examples/13-semantic-signals.md) | `npm run fsi:semantic-signals` | Intent features, knowledge-graph relations, and a gated two-step entity classification |
+| [14 — Search reranking (FSI)](docs/examples/14-search-rerank.md) | `npm run fsi:search-rerank` | Rules remove ineligible results, then a bounded choice reranks the rest |
 | [FSI evaluation](docs/examples/fsi-eval.md) | `npm run fsi:eval` | Offline threshold sweep over the 07 and 08 ledgers (fixtures only) |
 | [LangChain (Python)](docs/examples/python.md) | `pip install -r examples/python/requirements.txt` | `langchain-typesafe` classifier and middleware |
 
@@ -63,7 +69,7 @@ The index of write-ups is [`docs/examples/README.md`](docs/examples/README.md).
 |---|---|
 | `npm run quickstart`, `judge`, `harness`, `browser`, `compare` | Run examples 01–04 and 06 |
 | `npm run record` | Run example 05 in Chrome and write `docs/media/browser-use.mp4` |
-| `npm run fsi:07`, `fsi:08`, `fsi:eval` | Run the FSI examples and the threshold sweep |
+| `npm run fsi:card-servicing` through `fsi:search-rerank`, `fsi:eval` | Run the FSI examples (07–14) and the threshold sweep |
 | `npm run example -- <file> [--backend=gateway\|local\|mock] [args]` | Run one example on a named backend (see [`docs/RUNNING.md`](docs/RUNNING.md#choosing-a-backend)) |
 | `npm run all` | Run 01–04, 06, the FSI examples and the sweep against live Jev (excludes 05) |
 | `npm run all:mock` | The same suite on scripted fixtures, with no API key. This is what CI runs |
@@ -94,7 +100,7 @@ and the mode rules are in [`docs/RUNNING.md`](docs/RUNNING.md) and
 ## Repository layout
 
 ```
-examples/          Runnable examples: 01–06 (TypeScript), fsi/ (07, 08 and eval), python/, site/
+examples/          Runnable examples: 01–06 (TypeScript), fsi/ (07–14 and eval), python/, site/
 src/               Shared code: client, fixtures, decision policy, ledger, act/verify/compensate runner
 local-jev/         Opt-in local proxy with the same wire API, backed by Laya (not Jev)
 scripts/           run-examples.ts, media-check.ts, check-docs.ts
@@ -131,7 +137,7 @@ runs. It is test infrastructure, not part of the live path.
 | [`docs/RUNNING.md`](docs/RUNNING.md) | Live and fixture runs, environment, the browser recording and known issues |
 | [`docs/SDKS.md`](docs/SDKS.md) | Which SDK and route to use, and the naming differences between APIs |
 | [`docs/CLAIM-CONTRACTS.md`](docs/CLAIM-CONTRACTS.md) | What each example may and must not claim |
-| [`docs/FSI-BOUNDARIES.md`](docs/FSI-BOUNDARIES.md) | Where this pattern should not be used, and what the repository does not answer |
+| [`src/decision-loop.ts`](src/decision-loop.ts) | The probe, act and refuse loop shared by the FSI examples 09–14 |
 | [`local-jev/README.md`](local-jev/README.md) | The local Laya proxy: parity coverage, configuration and limits |
 
 ## Evidence boundary

@@ -19,8 +19,14 @@ const examples = [
   '../examples/03-agent-harness.ts',
   '../examples/04-browser-use.ts',
   '../examples/06-jev-vs-control.ts',
-  '../examples/fsi/07-next-step/index.ts',
+  '../examples/fsi/07-card-servicing/index.ts',
   '../examples/fsi/08-runbook-routing/index.ts',
+  '../examples/fsi/09-fraud-alerts/index.ts',
+  '../examples/fsi/10-insurance-claims/index.ts',
+  '../examples/fsi/11-content-safety/index.ts',
+  '../examples/fsi/12-compliance-audit/index.ts',
+  '../examples/fsi/13-semantic-signals/index.ts',
+  '../examples/fsi/14-search-rerank/index.ts',
   '../examples/fsi/eval/index.ts',
 ];
 

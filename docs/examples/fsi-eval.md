@@ -24,7 +24,7 @@ example 08. The tables below are the output of that run, with intermediate
 lines elided where marked.
 
 ```
-07 — Bounded next-step recommendation
+07 — Card servicing: bounded next-step selection
   12 decision(s), 10 with a usable distribution to threshold on
 
   min mass  scored    acts  investigates  contradicted

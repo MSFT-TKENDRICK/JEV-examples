@@ -1,5 +1,5 @@
 /**
- * 07 — Uncertainty selects the next machine action.
+ * 07 — Card servicing: bounded next-step selection. Uncertainty selects the next machine action.
  *
  * ## The claim this example is allowed to make
  *
@@ -44,7 +44,7 @@
  * what the application does with a distribution, and cannot show that a
  * distribution deserves trust.
  *
- * Run:  npm run fsi:07
+ * Run:  npm run fsi:card-servicing
  */
 
 import { VERSION } from '@typesafe-ai/sdk';
@@ -125,7 +125,7 @@ console.log(
 );
 
 const ledger = createLedger({
-  component: 'fsi-07-next-step',
+  component: 'fsi-07-card-servicing',
   mode: runMode(live),
   service: { model: 'unknown (no response yet)', sdkPackage: '@typesafe-ai/sdk', sdkVersion: VERSION },
   // A scripted run is a fixture, and `runId` feeds `planDigest`. With a random
