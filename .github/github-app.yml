@@ -1,0 +1,52 @@
+# Run buttons for the GitHub Copilot app. Commands run from the repository root.
+#
+# "Setup" runs when a session (worktree) is created and installs the locked
+# dependencies. Every other script is a manual run button.
+#
+# Live examples call Jev through Vercel AI Gateway and need AI_GATEWAY_API_KEY
+# (or VERCEL_OIDC_TOKEN) in .env, which is gitignored and must exist in each
+# worktree. "All examples (fixtures)" and "Check" need no key.
+
+scripts:
+  - name: Setup
+    command: npm ci
+    triggers:
+      - session.create
+
+  - name: 01 Quickstart
+    command: npm run quickstart
+
+  - name: 02 Judge rubrics
+    command: npm run judge
+
+  - name: 03 Agent harness
+    command: npm run harness
+
+  - name: 04 Browser use
+    command: npm run browser
+
+  # Drives real Chrome without recording. Recording (npm run record) writes
+  # docs/media/browser-use.mp4 and would overwrite the committed capture.
+  - name: 05 Browser live (no video)
+    command: npm run record -- --no-video
+
+  - name: 06 Jev vs control
+    command: npm run compare
+
+  - name: 07 Next step (FSI)
+    command: npm run fsi:07
+
+  - name: 08 Runbook routing (FSI)
+    command: npm run fsi:08
+
+  - name: FSI evaluation (fixtures)
+    command: npm run fsi:eval
+
+  - name: All examples (live)
+    command: npm run all
+
+  - name: All examples (fixtures)
+    command: npm run all:mock
+
+  - name: Check
+    command: npm run check

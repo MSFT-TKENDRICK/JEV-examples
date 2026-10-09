@@ -5,6 +5,34 @@ how to configure them, and the known problems with the browser recording. The
 README has the short version; the per-example write-ups are in
 [`examples/`](examples/README.md).
 
+## Copilot desktop app
+
+[`.github/github-app.yml`](../.github/github-app.yml) defines run buttons for the
+GitHub Copilot app. Each example command appears as a button, and the **Setup**
+script runs `npm ci` when a new session (worktree) is created.
+
+| Button | Runs | Needs a key |
+|---|---|---|
+| 01–04, 06, 07, 08 | The matching `npm run` command, live | Yes |
+| 05 Browser live (no video) | `npm run record -- --no-video` | Yes |
+| FSI evaluation (fixtures) | `npm run fsi:eval` | No |
+| All examples (live) | `npm run all` | Yes |
+| All examples (fixtures) | `npm run all:mock` | No |
+| Check | `npm run check` | No |
+
+Live buttons read `.env` through the npm scripts. `.env` is gitignored, so create it
+in each worktree (copy `.env.example` and set `AI_GATEWAY_API_KEY`). Without it the
+button stops with the setup error.
+
+The app buttons do not run the video recording. `npm run record` writes
+`docs/media/browser-use.mp4`, which replaces the committed fixture capture. Run it from
+a terminal when you want a new recording.
+
+The Python examples are not in the app. They do not read `.env`, so export
+`AI_GATEWAY_API_KEY` in your shell before running them. See [`examples/python.md`](examples/python.md).
+The LangChain harness is also left out, because with `OPENAI_API_KEY` set it makes
+paid OpenAI calls.
+
 ## Live Jev by default
 
 The npm example scripts load `.env` with Node's `--env-file-if-exists=.env`.

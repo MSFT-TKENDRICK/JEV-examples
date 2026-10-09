@@ -33,6 +33,10 @@ with the same `/v1/systemone` API, backed by the open Laya model. It is **not Je
 Set `JEV_BACKEND=local` to point the examples at it. Scripted fixtures are documented
 in [`docs/RUNNING.md`](docs/RUNNING.md).
 
+In the GitHub Copilot desktop app, every example is a run button, configured in
+[`.github/github-app.yml`](.github/github-app.yml). See
+[the desktop app section of `docs/RUNNING.md`](docs/RUNNING.md#copilot-desktop-app).
+
 ## Examples
 
 | Example | Command | What it shows |
