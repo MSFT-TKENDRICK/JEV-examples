@@ -9,9 +9,10 @@ The central discipline:
 > The examples prove what the application does with a distribution, not that the
 > distribution deserves trust.
 
-The runnable Jev integrations use Vercel's live TypeSafe-compatible API by default,
-with `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` and model `typesafe-ai/jev`.
-Explicit `JEV_MOCK=1` selects fixture responses; the
+The runnable Jev integrations use Vercel's live TypeSafe-compatible API when
+`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is set, with model `typesafe-ai/jev`.
+With no credential, the npm example commands run the local Laya proxy instead, and
+label every output as Laya, not Jev. Explicit `JEV_MOCK=1` selects fixture responses; the
 threshold sweep and fault-injection checks are intentionally fixture-only.
 Committed excerpts and the browser recording are fixture captures, not live
 evidence. These contracts still apply to live runs: connectivity and decisions on

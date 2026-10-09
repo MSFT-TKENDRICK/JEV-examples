@@ -10,29 +10,31 @@ Jev returns a probability distribution over a bounded set of options. The exampl
 show what application code does with that distribution: it probes for more evidence,
 acts reversibly and verifies the result, or refuses and changes nothing.
 
-> Example commands call **live Jev** by default and need a Vercel AI Gateway key.
-> Without one they fail with a setup error. They never fall back to simulated answers.
-> Scripted fixture runs are available with `npm run all:mock`. Jev is metered on
-> Vercel at $0.042 per 1M input tokens (checked 2026-10-08).
+> Example commands call **live Jev** when a Vercel AI Gateway key is set. With no key,
+> the npm example commands run on the local Laya proxy instead, and the output says it
+> is not Jev. They never run simulated answers unless you ask for fixtures with
+> `npm run all:mock`. Jev is metered on Vercel at $0.042 per 1M input tokens (checked
+> 2026-10-08).
 
 ## Quick start
 
-Requirements: Node.js 22.18 or later (CI runs Node 24), and a Vercel AI Gateway API
-key or `VERCEL_OIDC_TOKEN`. Example 05 also downloads Chrome and ffmpeg through
-`webreel` on first use.
+Requirements: Node.js 22.18 or later (CI runs Node 24). A Vercel AI Gateway API key or
+`VERCEL_OIDC_TOKEN` is optional, and selects Jev. Example 05 also downloads Chrome and
+ffmpeg through `webreel` on first use.
 
 ```bash
 npm ci
+npm run local-jev:install        # the local Laya runtime, used when there is no key
 cp .env.example .env             # PowerShell: Copy-Item .env.example .env
-# Edit .env and set AI_GATEWAY_API_KEY. Leave JEV_MOCK unset for live Jev.
+# Optional: set AI_GATEWAY_API_KEY in .env to run Jev instead of Laya.
 npm run quickstart
 ```
 
-Without Gateway access, run any example on the local Laya proxy with
-`npm run example -- examples/01-quickstart.ts --backend=local`. The launcher starts
+Without Gateway access, the examples run on the local Laya proxy. The launcher starts
 [`local-jev/`](local-jev/README.md) itself. It is an opt-in local server with the same
 `/v1/systemone` API, backed by the open Laya model. It is **not Jev**, and the output
-says so. Scripted fixtures are documented in [`docs/RUNNING.md`](docs/RUNNING.md).
+says so. To force it, run `npm run example -- examples/01-quickstart.ts --backend=local`.
+Scripted fixtures are documented in [`docs/RUNNING.md`](docs/RUNNING.md).
 
 In the GitHub Copilot desktop app, every example is a run button, configured in
 [`.github/github-app.yml`](.github/github-app.yml). See

@@ -80,9 +80,11 @@ object form that 0.5.x accepted, such as `{ 0: 'none', 1: 'minor' }`, throws a
 | `JEV_BACKEND=local` | Opt-in: send the same SDK requests to the local Laya proxy in [`local-jev/`](../local-jev/README.md). Not Jev; runs are labelled `LOCAL_MODEL` |
 | `LOCAL_JEV_URL` / `LOCAL_JEV_TIMEOUT_MS` | Local proxy address (default `http://127.0.0.1:8765`) and SDK timeout (default 120 s) |
 
-Missing Gateway credentials are a setup error, not an offline-mode selector.
-Only an explicit `JEV_BACKEND=local` selects the local proxy, which is real
-inference by a different model (Laya), never presented as Jev. See
+The shared client treats a missing Gateway credential as a setup error. Direct
+`node examples/...` runs therefore need a credential or an explicit `JEV_BACKEND=local`.
+The npm example commands and the launcher add one rule on top: with no credential
+and no explicit choice, they run the local Laya proxy and say so in the banner.
+That proxy is real inference by a different model (Laya), never presented as Jev. See
 [`local-jev/README.md`](../local-jev/README.md) for what its API parity does and
 does not cover.
 The shared client does not fall back to `TYPESAFE_API_KEY` or `TYPESAFE_BASE_URL`.

@@ -7,28 +7,40 @@ README has the short version; the per-example write-ups are in
 
 ## Choosing a backend
 
-Every example runs on one of three backends. The backend is named explicitly. No
-run falls back to another one.
+Every example runs on one of three backends. The first rule below that matches
+decides, and the banner printed at the start of the run names the rule.
 
-| Backend | What answers | Needs | Labelled as |
-|---|---|---|---|
-| `gateway` (default) | Jev, through Vercel AI Gateway | `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | Jev |
-| `local` | The local Laya proxy in [`local-jev/`](../local-jev/README.md). Same API, different model | Nothing beyond `npm run local-jev:install` | Laya, not Jev |
-| `mock` | Scripted fixtures, no inference | Nothing | fixture |
+1. `--backend=gateway|local|mock` on the command line
+2. `JEV_MOCK=1`: scripted fixtures
+3. `JEV_BACKEND=gateway` or `local`, from the environment or `.env`
+4. A Gateway credential is set (`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`): Jev through Vercel AI Gateway
+5. No credential is set: the local Laya proxy in [`local-jev/`](../local-jev/README.md). **That is not Jev.**
 
-Run one example on a chosen backend with the launcher:
+Rule 5 is the only fallback in the repository. It lets the npm example commands run
+without a key. It is never silent: the banner says the answers are Laya's, and each
+example's output names the model that answered. Direct `node examples/...` runs do not
+use this rule. They still need a credential or `JEV_BACKEND`.
+
+| Backend | What answers | Labelled as |
+|---|---|---|
+| `gateway` | Jev, through Vercel AI Gateway | Jev |
+| `local` | The local Laya proxy. Same API, different model | Laya, not Jev |
+| `mock` | Scripted fixtures, no inference | fixture |
+
+The npm example commands and the launcher choose through the same rules:
 
 ```bash
-npm run example -- examples/01-quickstart.ts --backend=local
-npm run example -- examples/python/judge_rubric.py --backend=local
-npm run example -- examples/05-browser-live.ts --backend=local --no-video
+npm run quickstart                                              # rule 4 or 5
+npm run example -- examples/01-quickstart.ts --backend=local    # always local
+npm run example -- examples/python/judge_rubric.py              # Python, same rules
+npm run example -- examples/05-browser-live.ts --no-video
 ```
 
-With `--backend=local` the launcher starts the proxy and stops it when the example
-ends. If a proxy already answers at `LOCAL_JEV_URL`, the launcher uses that one. The
-first start loads the 1.7 GB model from `~/.cache/receptron-laya`, which is downloaded
-on first use. Local answers differ from Jev's, so a local run can reach a different
-route or a refusal. That is expected, and the output says which model answered.
+When the local backend is chosen, the launcher starts the proxy and stops it when the
+example ends. If a proxy already answers at `LOCAL_JEV_URL`, that one is used and left
+running. The first start loads the 1.7 GB model from `~/.cache/receptron-laya`. Local
+answers differ from Jev's, so a local run can reach a different route or a refusal.
+That is expected.
 
 The launcher loads `.env` before it starts the example. Python examples receive the
 same environment, so `AI_GATEWAY_API_KEY` in `.env` reaches them too. Set `JEV_PYTHON`
@@ -37,19 +49,22 @@ to choose the interpreter. The default is `python` on Windows and `python3` else
 ## Copilot desktop app
 
 [`.github/github-app.yml`](../.github/github-app.yml) defines run buttons for the
-GitHub Copilot app. Each button is named with its backend. **Setup** runs `npm ci`
-and `npm run local-jev:install` when a new session (worktree) is created.
+GitHub Copilot app. **Setup** runs `npm ci` and `npm run local-jev:install` when a new
+session (worktree) is created. The example buttons follow the rules above: with a key
+in `.env` they run Jev, and without one they run the local Laya proxy and say so.
 
-| Button | Runs | Needs |
+| Button | Runs | Backend |
 |---|---|---|
-| Live: 01–08, all examples | The `npm run` command, against Jev | `AI_GATEWAY_API_KEY` in `.env` |
-| Live: 05 Browser (no video) | `npm run record -- --no-video` | `AI_GATEWAY_API_KEY` in `.env` |
-| Local: 01–08 and Python judge | `npm run example -- <file> --backend=local` | Nothing (Laya, not Jev) |
+| 01–08 | The matching `npm run` command | Jev if a key is set, otherwise Laya |
+| 05 Browser (no video) | `npm run record -- --no-video` | Jev if a key is set, otherwise Laya |
+| Python judge rubric | `npm run example -- examples/python/judge_rubric.py` | Jev if a key is set, otherwise Laya |
+| All examples | `npm run all` (excludes 05) | Jev if a key is set, otherwise Laya. Takes about 25 minutes on Laya |
 | Python: install examples requirements | `npm run python:install` | Python on `PATH` |
-| Fixtures: all examples, FSI evaluation | `npm run all:mock`, `npm run fsi:eval` | Nothing |
-| Check | `npm run check` | Nothing |
+| Fixtures: all examples, FSI evaluation | `npm run all:mock`, `npm run fsi:eval` | Fixtures, no inference |
+| Check | `npm run check` | None |
 
-`.env` is gitignored, so create it in each worktree by copying `.env.example`.
+`.env` is gitignored, so create it in each worktree by copying `.env.example`. Put
+`AI_GATEWAY_API_KEY` in it to run Jev.
 
 The app buttons do not run the video recording. `npm run record` writes
 `docs/media/browser-use.mp4`, which replaces the committed fixture capture. Run it from
@@ -69,9 +84,11 @@ The npm example scripts load `.env` with Node's `--env-file-if-exists=.env`.
 3. Leave `JEV_MOCK` unset.
 
 The shared client sends `typesafe-ai/jev` requests to
-`https://ai-gateway.vercel.sh/typesafe`. Without Gateway credentials the examples
-fail with a setup error. They do not switch to scripted responses, and they do not
-fall back to a direct TypeSafe key or endpoint. See
+`https://ai-gateway.vercel.sh/typesafe`. The npm example commands use Jev when a
+credential is set, and the local Laya proxy when none is (see
+[Choosing a backend](#choosing-a-backend)). Direct `node examples/...` runs with no
+credential fail with a setup error. They never switch to scripted responses, and they
+never fall back to a direct TypeSafe key or endpoint. See
 [`SDKS.md`](SDKS.md#repository-configuration) for every variable the client reads.
 
 Direct `node examples/...` invocations do **not** load `.env`. Either add

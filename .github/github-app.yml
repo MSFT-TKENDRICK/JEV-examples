@@ -3,12 +3,12 @@
 # "Setup" runs when a session (worktree) is created. It installs the locked
 # dependencies and the local Laya runtime.
 #
-# Three kinds of run, named by prefix:
-#   Live:      calls Jev through Vercel AI Gateway. Needs AI_GATEWAY_API_KEY in
-#              .env. .env is gitignored, so create it in each worktree.
-#   Local:     calls the local Laya proxy (local-jev/). No key. This is NOT Jev,
-#              and every banner says so. The launcher starts the proxy itself.
-#   Fixtures:  scripted responses. No key, no inference.
+# Example buttons choose their backend the same way the npm commands do:
+#   - with AI_GATEWAY_API_KEY (or VERCEL_OIDC_TOKEN) set in .env, they call Jev
+#     through Vercel AI Gateway;
+#   - with no credential, they call the local Laya proxy (local-jev/), which is
+#     NOT Jev. The banner at the top of each run says which one answered.
+# .env is gitignored, so create it in each worktree.
 #
 # The Python harness (examples/python/langchain_harness.py) is not listed. It
 # makes paid OpenAI calls and needs OPENAI_API_KEY, and langchain-openai has no
@@ -23,63 +23,41 @@ scripts:
   - name: "Python: install examples requirements"
     command: npm run python:install
 
-  - name: "Live: 01 Quickstart"
+  - name: "01 Quickstart"
     command: npm run quickstart
 
-  - name: "Live: 02 Judge rubrics"
+  - name: "02 Judge rubrics"
     command: npm run judge
 
-  - name: "Live: 03 Agent harness"
+  - name: "03 Agent harness"
     command: npm run harness
 
-  - name: "Live: 04 Browser use"
+  - name: "04 Browser use"
     command: npm run browser
 
-  # Drives real Chrome without recording. Recording (npm run record) writes
+  # Drives Chrome without recording. Recording (npm run record) writes
   # docs/media/browser-use.mp4 and would overwrite the committed capture.
-  - name: "Live: 05 Browser (no video)"
+  - name: "05 Browser (no video)"
     command: npm run record -- --no-video
 
-  - name: "Live: 06 Jev vs control"
+  - name: "06 Jev vs control"
     command: npm run compare
 
-  - name: "Live: 07 Next step (FSI)"
+  - name: "07 Next step (FSI)"
     command: npm run fsi:07
 
-  - name: "Live: 08 Runbook routing (FSI)"
+  - name: "08 Runbook routing (FSI)"
     command: npm run fsi:08
 
-  - name: "Live: all examples"
+  - name: "Python judge rubric"
+    command: npm run example -- examples/python/judge_rubric.py
+
+  # All examples except 05, in sequence. On the local Laya proxy this takes
+  # about 25 minutes.
+  - name: "All examples"
     command: npm run all
 
-  - name: "Local: 01 Quickstart"
-    command: npm run example -- examples/01-quickstart.ts --backend=local
-
-  - name: "Local: 02 Judge rubrics"
-    command: npm run example -- examples/02-judge-rubrics.ts --backend=local
-
-  - name: "Local: 03 Agent harness"
-    command: npm run example -- examples/03-agent-harness.ts --backend=local
-
-  - name: "Local: 04 Browser use"
-    command: npm run example -- examples/04-browser-use.ts --backend=local
-
-  - name: "Local: 05 Browser (no video)"
-    command: npm run example -- examples/05-browser-live.ts --backend=local --no-video
-
-  - name: "Local: 06 Jev vs control"
-    command: npm run example -- examples/06-jev-vs-control.ts --backend=local
-
-  - name: "Local: 07 Next step (FSI)"
-    command: npm run example -- examples/fsi/07-next-step/index.ts --backend=local
-
-  - name: "Local: 08 Runbook routing (FSI)"
-    command: npm run example -- examples/fsi/08-runbook-routing/index.ts --backend=local
-
-  - name: "Local: Python judge rubric"
-    command: npm run example -- examples/python/judge_rubric.py --backend=local
-
-  - name: "Fixtures: all examples"
+  - name: "Fixtures: all examples (no inference)"
     command: npm run all:mock
 
   - name: "Fixtures: FSI evaluation"

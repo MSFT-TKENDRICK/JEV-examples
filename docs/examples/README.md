@@ -20,8 +20,9 @@ and [`../FSI-BOUNDARIES.md`](../FSI-BOUNDARIES.md).
 
 ## Reading the output
 
-- The commands call **live Jev** through Vercel AI Gateway by default. They need
-  `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`, and fail without one.
+- The commands call **live Jev** through Vercel AI Gateway when `AI_GATEWAY_API_KEY`
+  or `VERCEL_OIDC_TOKEN` is set. With no key, the npm example commands run on the local
+  Laya proxy and say so. Use `--backend=gateway|local|mock` to choose explicitly.
 - Output blocks in these write-ups are **captures from scripted fixture runs**
   (`JEV_MOCK=1`) unless a write-up says otherwise. A live run can reach different
   decisions on the same synthetic scenario. Neither is evidence of model quality.
